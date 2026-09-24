@@ -25,6 +25,9 @@ arrives, and is configured entirely through its own web interface.
   chime, doorbell and arpeggio to alarm-clock beeps, three sirens, the NOAA 1050 Hz warning tone and a simulation of
   the EAS attention signal (with or without the SAME data bursts). Extreme alerts such as tornado warnings get their
   own sound; volume, quiet hours and optional repeats while an alert stays unacknowledged.
+- **Spoken announcements**: after the chime a natural English voice says what happened: "Tornado Warning",
+  "Lightning nearby", "Alarm", "Timer finished". The clips come from a voice pack rendered with Piper TTS that the
+  clock downloads once from the update site; no speech synthesis runs on the ESP32.
 - **Display control**: manual brightness, day/night schedule, night mode (very dim, clock only), gamma, colours,
   page order and timing.
 - **Web UI** with setup access point and captive portal, mDNS (`matrixclock.local`), REST API, WiFi scanner,
@@ -110,7 +113,8 @@ reads the installer's `manifest.json`, and when a newer version is listed it dow
 the MD5 from the manifest, installs it with a progress bar on the panel and reboots. Automatic installs wait while an
 alarm or timer is running. The Update tab shows the installed and latest versions and has "Check now" and "Install"
 buttons; automatic installation can be switched off to install manually. The manifest URL is configurable, so a fork
-can point its clocks at its own GitHub Pages site.
+can point its clocks at its own GitHub Pages site. The same manifest advertises the voice pack for the spoken
+announcements; the clock fetches a new pack whenever the pack version changes.
 
 ## Building and flashing
 
@@ -231,7 +235,7 @@ hold the settings. Changes apply immediately except panel driver settings, which
 | <img src="docs/ui/ui-panel.png" alt="Panel tab"> | <img src="docs/ui/ui-notify.png" alt="Notify tab"> |
 | Panel: HUB75 driver settings and the test pattern | Notify: Pushbullet notifications in both directions |
 | <img src="docs/ui/ui-audio.png" alt="Audio tab"> | <img src="docs/ui/ui-wifi.png" alt="WiFi tab"> |
-| Audio: chime, volume, quiet hours | WiFi: network, hostname, setup AP password, factory reset |
+| Audio: chime, volume, quiet hours, spoken announcements | WiFi: network, hostname, setup AP password, factory reset |
 
 Screenshots are taken from the real page served with sample data; images live in `docs/ui/`.
 
@@ -304,6 +308,23 @@ counts down in the bottom half and rings the same way.
 Messages: `POST /api/message` with `{"text": "...", "seconds": 60, "chime": true, "color": "#40C0FF"}` scrolls the
 text (0 seconds = until cleared with `POST /api/message/clear` or the wheel push). The Status tab has a form for it.
 
+## Spoken announcements
+
+Right after the chime the clock can say what happened in a natural English voice: the NWS event name for a new alert
+("Tornado Warning", "Winter Storm Watch", any of the 111 event types the NWS publishes, or "Weather alert" for one it
+does not know), "Lightning nearby" for the first strike of a storm, "Alarm" or "Timer finished" when a ring starts, and
+the scenario names in demo mode. Each can be switched off separately on the Audio tab, and an announcement can be
+repeated up to three times. Speech follows the chime's quiet hours and volume.
+
+The voice is not synthesized on the ESP32. A GitHub Actions step renders every phrase with
+[Piper](https://github.com/rhasspy/piper) (voice `en_US-ljspeech-medium`, trained on the public-domain LJ Speech
+recordings), compresses the clips to 4-bit ADPCM and publishes them as a ~2 MB *voice pack* next to the firmware. When
+speech is enabled the clock downloads the pack over HTTPS into its own flash file system, verifies the MD5 from the
+manifest and keeps it across firmware updates; a new pack is fetched only when its version changes. The Audio tab
+shows the installed pack, has a "Download voice pack" button and a phrase picker to hear any clip, and
+`POST /api/test/say {"text": "Tornado Warning"}` does the same from a script. To rebuild the pack yourself, or with
+another Piper voice, run `tools/make_voice_pack.py` (see its header for the file format).
+
 ## Pushbullet
 
 Notify tab: paste an access token from Pushbullet's account settings. The clock registers itself as a device named
@@ -347,6 +368,7 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixcloc
 | Board resets when the panel goes bright | panel power supply too weak; lower *Max brightness cap* |
 | WiFi weak while the panel runs | raise TX power on the WiFi tab, route the ribbon cable away from the antenna |
 | No chime | Status tab shows whether the ES8311 was found; check volume, quiet hours, speaker connector |
+| Chime plays but nothing is spoken | Audio tab: the voice pack must show as installed; press "Download voice pack" (needs internet and about 2 MB of free flash), check `/api/log` for `voice:` lines |
 | Keys do nothing | Status tab shows whether the PCA9557 expander was found; `/api/log` prints raw key states |
 
 If a panel setting makes the board reset repeatedly, the firmware restores the panel defaults automatically after
@@ -363,13 +385,14 @@ partitions/mwc_16MB.csv   two 3 MB OTA app slots + LittleFS
 include/pins.h            every GPIO in one place
 include/fonts/            7x11 clock digits
 web/index.html            the web UI; tools/build_web.py gzips it into flash at build time
+tools/make_voice_pack.py  renders the spoken phrases with Piper TTS into the voice pack (run in CI)
 src/main.cpp              boot order and the 30 fps frame loop
 src/app.*                 config staging from the web, reboot / factory reset
 src/config/               settings struct, JSON load/save/validation (LittleFS /config.json)
 src/display/              HUB75 bring-up, off-screen canvas with diff blit, renderer, icons, scroller, test pattern
-src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store
+src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store, updater, voice pack download
 src/time/                 NTP, time zone table, PCF85063 RTC driver
-src/audio/                ES8311 codec, I2S chime synthesizer
+src/audio/                ES8311 codec, I2S chime synthesizer, ADPCM voice-clip player, voice pack index
 src/io/                   I2C bus with device probing, PCA9557 expander, buttons
 src/web/                  async web server, REST API, OTA
 docs/                     hardware, API and testing notes
@@ -384,5 +407,7 @@ panel clock is fixed at 8 MHz to keep WiFi usable next to the running matrix.
 [ESP32-HUB75-MatrixPanel-DMA](https://github.com/mrfaptastic/ESP32-HUB75-MatrixPanel-DMA) (panel driver),
 [Adafruit GFX](https://github.com/adafruit/Adafruit-GFX-Library), [ESP32Async ESPAsyncWebServer and
 AsyncTCP](https://github.com/ESP32Async), [ArduinoJson](https://arduinojson.org/). The ES8311 register sequence is
-ported from Espressif's esp-bsp codec component (Apache-2.0). Weather data by Open-Meteo, alerts by the US National
+ported from Espressif's esp-bsp codec component (Apache-2.0). Spoken announcements are rendered with
+[Piper](https://github.com/rhasspy/piper) (MIT) using the `en_US-ljspeech-medium` voice, trained on the public-domain
+[LJ Speech](https://keithito.com/LJ-Speech-Dataset/) dataset. Weather data by Open-Meteo, alerts by the US National
 Weather Service.

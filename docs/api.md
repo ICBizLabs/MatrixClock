@@ -7,7 +7,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | GET | `/` | Web UI (gzip, ETag) |
 | GET | `/setup` | mobile setup wizard (WiFi, location, time zone, alert contact) |
 | GET | `/manifest.webmanifest`, `/sw.js`, `/icon-192.png`, `/icon-512.png`, `/apple-touch-icon.png` | web-app manifest, service worker and icons for "Add to Home Screen" |
-| GET | `/api/status` | time, weather summary, active alerts, WiFi, network fetch status, memory, panel, audio, I2C map |
+| GET | `/api/status` | time, weather summary, active alerts, WiFi, network fetch status, memory, panel, audio, speech (voice pack state), I2C map |
 | GET | `/api/config` | full configuration (passwords masked as `***`) plus `tz_options` |
 | POST | `/api/config` | partial configuration merge; body is any subset of the config object. Returns `{ok, applied[], reboot_required[]}` or `{ok:false, error}` with HTTP 400 |
 | GET | `/api/weather` | last Open-Meteo result |
@@ -15,6 +15,9 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/alerts/ack` | form or query `id=<alert id>` or `id=all` |
 | POST | `/api/test/alert` | `{event, severity, headline, minutes}` injects a synthetic alert |
 | POST | `/api/test/chime` | `{style?, force}` plays a chime (`force` ignores quiet hours) |
+| POST | `/api/test/say` | `{text, force}` speaks a phrase from the voice pack ("Tornado Warning", "Lightning nearby", ...); 404 when the phrase is not in the pack, 409 without a pack or while another sound plays |
+| POST | `/api/voice/download` | fetch the manifest and (re)download the voice pack into LittleFS |
+| GET | `/api/voice/phrases` | `{installed, voice, version, phrases[]}`: every phrase the installed pack contains |
 | POST | `/api/test/panel` | shows the test pattern; optional `sec=3..300` (default 10) |
 | POST | `/api/message` | `{text, seconds (0 = until cleared), color "#RRGGBB", chime, force}` scrolls a message |
 | POST | `/api/message/clear` | remove the message |
@@ -24,7 +27,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/alarm/stop`, `/api/alarm/snooze` | control a ringing alarm |
 | GET | `/api/config?download=1` | full configuration with passwords, as a downloadable backup |
 | POST | `/api/test/push` | send a test Pushbullet notification |
-| POST | `/api/demo` | `on=1|0`, `minutes=N`, `sound=1|0`: cycle demo screens with sample data, auto-off after N minutes; with sound the alert, lightning, alarm, timer and message scenarios chime |
+| POST | `/api/demo` | `on=1|0`, `minutes=N`, `sound=1|0`: cycle demo screens with sample data, auto-off after N minutes; with sound the alert, lightning, alarm, timer and message scenarios chime and every scenario says its name |
 | POST | `/api/update/check` | check the manifest for a newer version now |
 | POST | `/api/update/install` | download, verify and install the available version, then reboot |
 | POST | `/api/show` | `screen=forecast` or `screen=hourly` shows that full screen now |
@@ -49,7 +52,8 @@ Configuration keys and defaults:
                 "night_mode": { "enabled": true, "start": "23:00", "end": "06:00", "level": 8, "hide_bottom": true },
                 "colors": { "time": "#FFFFFF", "date": "#80C0FF", "temp": "#FFD060", "text": "#C0C0C0", "hi": "#FF8060", "lo": "#60A0FF" } },
   "panel":    { "width": 64, "height": 32, "chain": 1, "driver": "SHIFTREG", "clkphase": false, "latch_blanking": 2, "i2s_speed_hz": 8000000, "min_refresh_hz": 120, "max_brightness": 255, "color_depth_bits": 8, "double_buffer": false, "swap_rb": false },
-  "audio":    { "enabled": true, "volume": 60, "chime": "two_tone", "chime_extreme": "eas_attention", "repeat_min": 0, "quiet": { "enabled": true, "start": "22:00", "end": "07:00" } },
+  "audio":    { "enabled": true, "volume": 60, "chime": "two_tone", "chime_extreme": "eas_attention", "repeat_min": 0, "quiet": { "enabled": true, "start": "22:00", "end": "07:00" },
+                "speech": { "enabled": true, "alerts": true, "lightning": true, "alarms": true, "demo": true, "repeat": 1 } },
   "pushbullet": { "token": "", "device_iden": "", "notify_alerts": true, "notify_min_severity": "Severe", "notify_lightning": true,
                   "notify_alarms": false, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
   "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixClock/manifest.json", "check_hours": 6 },
@@ -59,6 +63,8 @@ Configuration keys and defaults:
 
 Pages: `date`, `temp`, `cond`, `wind`, `hilo`, `feels`, `sun`. Alarm `days` is a 7-character string Monday..Sunday (`1` = on). Severities: `Unknown`, `Minor`, `Moderate`, `Severe`,
 `Extreme`. Chimes: `none`, `two_tone`, `triple_beep`, `chirp`, `alarm_beeps`, `doorbell`, `arpeggio`, `sonar`, `sos`, `siren_hilo`, `siren_wail`,
-`siren_yelp`, `nws_1050`, `eas_attention`, `eas_full`. `audio.chime_extreme` is used for Extreme alerts, `audio.chime` for everything else. Drivers: `SHIFTREG`, `FM6124`, `FM6126A`,
+`siren_yelp`, `nws_1050`, `eas_attention`, `eas_full`. `audio.chime_extreme` is used for Extreme alerts, `audio.chime` for everything else. `audio.speech` controls the spoken announcements
+(the event name of a new alert, "Lightning nearby", "Alarm" / "Timer finished", demo scenario names; `repeat` 1..3); an alert event without
+a clip in the voice pack is announced as "Weather alert". Drivers: `SHIFTREG`, `FM6124`, `FM6126A`,
 `ICN2038S`, `MBI5124`, `DP3246`. Sending `"tz_id"` without `"tz_posix"` fills the POSIX string from the built-in
 US zone table. `wifi.pass` / `wifi.ap_pass` set to `"***"` keep the stored secret.

@@ -180,18 +180,26 @@ namespace alerts {
     give();
   }
 
-  bool takeNewForChime(const AlertsConfig& cfg, uint16_t repeat_min, uint32_t now_ms, Severity* top) {
+  bool takeNewForChime(const AlertsConfig& cfg, uint16_t repeat_min, uint32_t now_ms, Severity* top, char* event, size_t eventLen) {
     if (!take()) return false;
     bool fire = false;
     Severity best = Severity::Unknown;
+    int bestIdx = -1;
     for (size_t i = 0; i < count_; i++) {
       AlertItem& it = items[i];
       if (it.acknowledged || !passesFilter(it, cfg) || (uint8_t)it.sev < (uint8_t)cfg.chime_min_severity) continue;
       bool f = false;
       if (!it.chimed) { it.chimed = true; it.last_chime_ms = now_ms; f = true; }
       else if (repeat_min && now_ms - it.last_chime_ms >= (uint32_t)repeat_min * 60000UL) { it.last_chime_ms = now_ms; f = true; }
-      if (f) { fire = true; if ((uint8_t)it.sev > (uint8_t)best) best = it.sev; }
+      if (!f) continue;
+      fire = true;
+      // the highest severity wins; among equals the most recently seen alert
+      if (bestIdx < 0 || (uint8_t)it.sev > (uint8_t)best || ((uint8_t)it.sev == (uint8_t)best && it.first_seen_ms > items[bestIdx].first_seen_ms)) {
+        best = it.sev;
+        bestIdx = (int)i;
+      }
     }
+    if (event && eventLen) strlcpy(event, bestIdx >= 0 ? items[bestIdx].event : "", eventLen);
     give();
     if (top) *top = best;
     return fire;

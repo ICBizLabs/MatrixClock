@@ -306,6 +306,15 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
       if (!getHHMM(q, "start", a.quiet.start, t, err)) return false;
       if (!getHHMM(q, "end", a.quiet.end, t, err)) return false;
     }
+    JsonObjectConst sp = o["speech"];
+    if (!sp.isNull()) {
+      if (!getBool(sp, "enabled", a.speech.enabled, t, err)) return false;
+      if (!getBool(sp, "alerts", a.speech.alerts, t, err)) return false;
+      if (!getBool(sp, "lightning", a.speech.lightning, t, err)) return false;
+      if (!getBool(sp, "alarms", a.speech.alarms, t, err)) return false;
+      if (!getBool(sp, "demo", a.speech.demo, t, err)) return false;
+      if (!getNum(sp, "repeat", a.speech.repeat, t, err, 1, 3)) return false;
+    }
     if (t) changed |= CHG_AUDIO;
   }
 
@@ -497,6 +506,13 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   q["enabled"] = a.quiet.enabled;
   putHHMM(q, "start", a.quiet.start);
   putHHMM(q, "end", a.quiet.end);
+  JsonObject sp = o["speech"].to<JsonObject>();
+  sp["enabled"] = a.speech.enabled;
+  sp["alerts"] = a.speech.alerts;
+  sp["lightning"] = a.speech.lightning;
+  sp["alarms"] = a.speech.alarms;
+  sp["demo"] = a.speech.demo;
+  sp["repeat"] = a.speech.repeat;
 
   o = dst["lightning"].to<JsonObject>();
   o["enabled"] = c.lightning.enabled;

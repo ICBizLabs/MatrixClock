@@ -2,6 +2,7 @@
 #include <time.h>
 #include "config/config.h"
 #include "audio/audio_out.h"
+#include "audio/voice.h"
 #include "net/pushbullet.h"
 #include "time/time_service.h"
 #include "util/log.h"
@@ -29,6 +30,8 @@ namespace alarmclock {
       ringSince = millis();
       lastRing = 0;
       LOGI("alarm: %s ringing%s%s", timer ? "timer" : "alarm", ringLabel[0] ? " " : "", ringLabel);
+      // first ring: chime + spoken "Alarm" / "Timer finished"; the repeats in loop() stay chime-only
+      if (voice::announce(voice::Kind::Alarm, ringStyle, timer ? "timer finished" : "alarm", true)) lastRing = millis();
       if (g_cfg.pushbullet.notify_alarms) pushbullet::notify(timer ? "Timer done" : "Alarm", ringLabel[0] ? ringLabel : (timer ? "The countdown finished" : "Alarm is ringing"));
     }
   }

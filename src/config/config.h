@@ -126,6 +126,14 @@ struct QuietConfig {
   uint16_t start = 22 * 60;
   uint16_t end = 7 * 60;
 };
+struct SpeechConfig {         // spoken announcements from the downloaded voice pack (after the chime)
+  bool enabled = true;
+  bool alerts = true;           // NWS event name ("Tornado Warning")
+  bool lightning = true;        // "Lightning nearby"
+  bool alarms = true;           // "Alarm" / "Timer finished" once when the ring starts
+  bool demo = true;             // scenario names in demo mode (with demo sounds)
+  uint8_t repeat = 1;           // say each announcement 1..3 times
+};
 struct AudioConfig {
   bool enabled = true;
   uint8_t volume = 60;          // percent
@@ -133,6 +141,7 @@ struct AudioConfig {
   ChimeStyle chime_extreme = ChimeStyle::EasAttention; // Extreme alerts (tornado, hurricane, ...)
   uint16_t repeat_min = 0;      // re-chime interval while an unacknowledged alert stands, 0 = once
   QuietConfig quiet;
+  SpeechConfig speech;
 };
 constexpr uint8_t MAX_ALARMS = 4;
 struct AlarmConfig {

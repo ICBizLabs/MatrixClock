@@ -22,7 +22,7 @@ namespace renderer {
   void setDemo(bool on, uint32_t total_ms = 10 * 60000UL, bool sound = false);   // cycle demo scenarios (synthetic data), auto-off
   bool demoActive();
   bool demoSound();
-  bool consumeDemoSound(uint8_t& style);      // true when the demo wants a chime played now (ChimeStyle value)
+  bool consumeDemoSound(uint8_t& style, const char*& phrase);   // true when the demo wants a sound now: chime (ChimeStyle value, None = no chime) and/or a spoken phrase (nullptr = none)
   const char* demoScenario();
   uint32_t demoRemainingSec();
   bool nightActive();

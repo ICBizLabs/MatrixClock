@@ -27,6 +27,13 @@ pio device monitor           # serial log at 115200
    For a live alert run `tools/find_nws_test_point.sh` and point the clock at the printed coordinates.
 6. **Audio** – `curl -X POST http://matrixclock.local/api/test/chime -H 'Content-Type: application/json' -d '{"force":true}'`
    plays; with quiet hours covering "now" a test alert stays silent and `/api/log` shows `chime suppressed: quiet hours`.
+   **Speech** – with WiFi up, `curl -X POST http://matrixclock.local/api/voice/download`, then watch
+   `curl -s http://matrixclock.local/api/status | jq .speech` go `downloading` (with `progress`) → `verifying` → `installed`
+   and `/api/log` print `voice: pack v1 installed (134 clips, en_US-ljspeech-medium)`. Then
+   `curl -X POST http://matrixclock.local/api/test/say -H 'Content-Type: application/json' -d '{"text":"Tornado Warning"}'`
+   speaks (a phrase that is not in the pack returns 404), a test alert plays its chime followed by the event name,
+   a 5-second timer (`POST /api/timer {"seconds":5}`) beeps and says "Timer finished" once and then only beeps,
+   and `POST '/api/demo?on=1&sound=1'` announces every scenario. Power-cycle: `speech.installed` stays true.
 7. **RTC / buttons / OTA** – power-cycle with WiFi unavailable: the time is right immediately and
    `/api/status` `time.source` is `rtc`. K1 short = next page, K1 long = test pattern, K2 short = acknowledge alerts,
    K2 long = test chime, K3 short = refresh data, K3 long = reboot.

@@ -11,6 +11,7 @@
 #include "shared_state.h"
 #include "pushbullet.h"
 #include "updater.h"
+#include "voice_pack.h"
 #include "util/log.h"
 
 namespace net_task {
@@ -92,6 +93,8 @@ namespace net_task {
         if (paused) continue;
         forced &= ~JOB_UPDATE;
         updater::run(cfg);
+        if (paused) continue;
+        voice_pack::run(cfg);
       }
     }
   }

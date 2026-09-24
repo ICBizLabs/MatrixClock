@@ -20,6 +20,8 @@ namespace updater {
     constexpr size_t CHUNK = 4096;
     SemaphoreHandle_t mtx = nullptr;
     Status st = {};
+    VoiceInfo vinfo;
+    bool seenManifest = false;
     char md5[40] = "";
     String baseUrl;                                       // manifest URL without the file name
     uint32_t nextCheck = 0;
@@ -71,6 +73,21 @@ namespace updater {
         give();
       }
       strlcpy(md5, sum, sizeof(md5));
+      {
+        VoiceInfo v;
+        JsonObjectConst vo = doc["voice"];
+        if (!vo.isNull()) {
+          v.present = true;
+          strlcpy(v.file, vo["file"] | "", sizeof(v.file));
+          strlcpy(v.md5, vo["md5"] | "", sizeof(v.md5));
+          strlcpy(v.voice, vo["voice"] | "", sizeof(v.voice));
+          v.size = vo["size"] | 0;
+          v.version = vo["version"] | 0;
+          v.format = vo["format"] | 1;
+          if (!v.file[0]) v.present = false;
+        }
+        if (take()) { vinfo = v; seenManifest = true; give(); }
+      }
       if (versionNewer(ver, MWC_VERSION)) {
         if (strcmp(ver, st.latest) != 0) triedInstallFor = false;
         setState(State::Available);
@@ -183,6 +200,9 @@ namespace updater {
   }
 
   Status status() { Status copy = {}; if (take()) { copy = st; give(); } return copy; }
+  VoiceInfo voiceInfo() { VoiceInfo copy; if (take()) { copy = vinfo; give(); } return copy; }
+  String manifestBase() { String b; if (take()) { b = baseUrl; give(); } return b; }
+  bool manifestSeen() { bool s = false; if (take()) { s = seenManifest; give(); } return s; }
 
   const char* stateName(State s) {
     switch (s) {

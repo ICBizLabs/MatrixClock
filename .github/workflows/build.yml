@@ -30,6 +30,26 @@ jobs:
         run: pip install platformio "esptool~=4.8"
       - name: Build
         run: pio run -e seengreat_hub75_s3
+      # Voice pack for the spoken announcements: rendered with Piper TTS only when the phrase list or the generator
+      # changed (the pack is cached), and never allowed to break the firmware build.
+      - name: Restore a previously built voice pack
+        id: voice-cache
+        uses: actions/cache@v4
+        with:
+          path: installer/voice-*.pack
+          key: voice-pack-${{ hashFiles('tools/make_voice_pack.py', 'tools/nws_event_types.json') }}
+      - name: Cache the Piper voice model
+        if: steps.voice-cache.outputs.cache-hit != 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/piper-voices
+          key: piper-voice-en_US-ljspeech-medium
+      - name: Build voice pack (Piper TTS)
+        if: steps.voice-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          pip install "piper-tts>=1.3"
+          python tools/make_voice_pack.py --voice en_US-ljspeech-medium --voices-dir ~/.cache/piper-voices --out installer
       - name: Build web installer (factory image, OTA image, manifest)
         run: python tools/make_installer.py --out installer
       - name: Upload firmware images
@@ -38,6 +58,7 @@ jobs:
           name: firmware-${{ github.sha }}
           path: |
             installer/*.bin
+            installer/*.pack
             installer/manifest.json
       - name: Upload installer site for GitHub Pages
         uses: actions/upload-pages-artifact@v3
@@ -82,6 +103,10 @@ jobs:
             echo "|---|---|"
             echo "| $F | \`$(sha256sum $F | cut -c1-64)\` |"
             echo "| $O | \`$(sha256sum $O | cut -c1-64)\` (MD5 \`$MD5\`, as in manifest.json) |"
+            for V in voice-*.pack; do
+              [ -f "$V" ] || continue
+              echo "| $V | \`$(sha256sum $V | cut -c1-64)\` (voice pack for spoken announcements; the clock downloads it by itself) |"
+            done
             echo
           } > ../notes.md
       - name: Publish release
@@ -89,7 +114,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PRE=""; case "$GITHUB_REF_NAME" in *-*) PRE="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" release/*.bin release/manifest.json \
+          gh release create "$GITHUB_REF_NAME" release/*.bin $(ls release/*.pack 2>/dev/null) release/manifest.json \
             --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes $PRE
 
   # Publishes the installer at https://<owner>.github.io/<repo>/ . GitHub Pages needs a public repository

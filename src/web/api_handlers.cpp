@@ -14,6 +14,8 @@
 #include "net/shared_state.h"
 #include "net/alert_store.h"
 #include "audio/audio_out.h"
+#include "audio/voice.h"
+#include "net/voice_pack.h"
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
 #include "time/time_service.h"
@@ -143,6 +145,21 @@ namespace web {
       au["available"] = audio_out::available();
       au["quiet_now"] = audio_out::inQuietHours();
       au["buttons"] = buttons::available();
+      voice::PackInfo pi = voice::info();
+      voice_pack::Status vps = voice_pack::status();
+      JsonObject sp = root["speech"].to<JsonObject>();
+      app::cfgLock();
+      sp["enabled"] = g_cfg.audio.speech.enabled;
+      app::cfgUnlock();
+      sp["installed"] = pi.installed;
+      sp["version"] = pi.version;
+      sp["format"] = pi.format;
+      sp["voice"] = pi.voice;
+      sp["clips"] = pi.clips;
+      sp["state"] = voice_pack::stateName(vps.state);
+      sp["progress"] = vps.progress;
+      sp["available"] = vps.available_version;
+      sp["error"] = vps.err;
       const i2c_bus::Map& m = i2c_bus::map();
       JsonObject i2c = root["i2c"].to<JsonObject>();
       i2c["es8311"] = m.es8311; i2c["pca9557"] = m.pca9557; i2c["rtc"] = m.rtc;
@@ -242,6 +259,17 @@ namespace web {
       else sendJsonError(r, 409, String("chime suppressed: ") + audio_out::lastSuppressReason());
     }
 
+    void handleTestSay(AsyncWebServerRequest* r, JsonVariant& json) {
+      JsonObjectConst o = json.as<JsonObjectConst>();
+      const char* text = o["text"] | "";
+      if (!*text) { sendJsonError(r, 400, "text required"); return; }
+      if (!voice::info().installed) { sendJsonError(r, 409, "no voice pack installed"); return; }
+      audio_out::ClipRef c;
+      if (!voice::lookup(text, c)) { sendJsonError(r, 404, "phrase not in voice pack"); return; }
+      if (voice::say(text, o["force"] | true)) r->send(200, "application/json", "{\"ok\":true}");
+      else sendJsonError(r, 409, String("speech suppressed: ") + voice::lastError());
+    }
+
     void handleMessage(AsyncWebServerRequest* r, JsonVariant& json) {
       JsonObjectConst o = json.as<JsonObjectConst>();
       const char* text = o["text"] | "";
@@ -325,6 +353,18 @@ namespace web {
     });
     server.on("/api/update/check", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestCheck(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/update/install", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestInstall(); r->send(200, "application/json", "{\"ok\":true}"); });
+    server.on("/api/voice/download", HTTP_POST, [](AsyncWebServerRequest* r) { voice_pack::requestDownload(); r->send(200, "application/json", "{\"ok\":true}"); });
+    server.on("/api/voice/phrases", HTTP_GET, [](AsyncWebServerRequest* r) {
+      auto* res = new AsyncJsonResponse(false);
+      JsonObject root = res->getRoot();
+      voice::PackInfo pi = voice::info();
+      root["installed"] = pi.installed;
+      root["voice"] = pi.voice;
+      root["version"] = pi.version;
+      voice::phrases(root["phrases"].to<JsonArray>());
+      res->setLength();
+      r->send(res);
+    });
     server.on("/api/show", HTTP_POST, [](AsyncWebServerRequest* r) {
       String which = r->hasParam("screen", true) ? r->getParam("screen", true)->value() : (r->hasParam("screen") ? r->getParam("screen")->value() : "forecast");
       if (renderer::requestFullScreen(which.c_str())) r->send(200, "application/json", "{\"ok\":true}");
@@ -357,6 +397,9 @@ namespace web {
     auto* testChime = new AsyncCallbackJsonWebHandler("/api/test/chime", handleTestChime);
     testChime->setMethod(HTTP_POST);
     server.addHandler(testChime);
+    auto* testSay = new AsyncCallbackJsonWebHandler("/api/test/say", handleTestSay);
+    testSay->setMethod(HTTP_POST);
+    server.addHandler(testSay);
     auto* message = new AsyncCallbackJsonWebHandler("/api/message", handleMessage);
     message->setMethod(HTTP_POST);
     server.addHandler(message);

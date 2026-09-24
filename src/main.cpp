@@ -20,12 +20,14 @@
 #include "net/lightning.h"
 #include "net/pushbullet.h"
 #include "net/updater.h"
+#include "net/voice_pack.h"
 #include "net/shared_state.h"
 #include "net/alert_store.h"
 #include "net/wifi_manager.h"
 #include "net/net_task.h"
 #include "time/time_service.h"
 #include "audio/audio_out.h"
+#include "audio/voice.h"
 #include "web/web_server.h"
 
 static Canvas canvas(layout::W, layout::H);
@@ -99,6 +101,8 @@ void setup() {
   web::begin();
   net_task::start();
   audio_out::begin(g_cfg.audio, i2c.es8311);
+  voice::begin(g_cfg.audio);
+  voice_pack::begin();
   buttons::begin(onButton);
   lightning::begin();
   LOGI("setup done, heap %lu", (unsigned long)ESP.getFreeHeap());
@@ -116,15 +120,16 @@ void loop() {
     timesvc::onWifiUp(g_cfg.time);
     net_task::kick(net_task::JOB_WEATHER | net_task::JOB_ALERTS);
   }
-  { uint8_t style; if (renderer::consumeDemoSound(style)) audio_out::chime((ChimeStyle)style, true); }
+  { uint8_t style; const char* phrase; if (renderer::consumeDemoSound(style, phrase)) voice::announce(voice::Kind::Demo, (ChimeStyle)style, phrase, true); }
   if (now - lastSecond >= 1000) {
     lastSecond = now;
     alerts::expire(time(nullptr));
     Severity fired;
-    if (alerts::takeNewForChime(g_cfg.alerts, g_cfg.audio.repeat_min, now, &fired))
-      audio_out::chime(fired == Severity::Extreme ? g_cfg.audio.chime_extreme : g_cfg.audio.chime, false);
+    char firedEvent[48];
+    if (alerts::takeNewForChime(g_cfg.alerts, g_cfg.audio.repeat_min, now, &fired, firedEvent, sizeof(firedEvent)))
+      voice::announce(voice::Kind::Alert, fired == Severity::Extreme ? g_cfg.audio.chime_extreme : g_cfg.audio.chime, firedEvent, false);
     alarmclock::loop(now);
-    if (lightning::consumeChimeEvent()) audio_out::chime(g_cfg.audio.chime, false);
+    if (lightning::consumeChimeEvent()) voice::announce(voice::Kind::Lightning, g_cfg.audio.chime, "lightning nearby", false);
     if (lightning::consumeNotifyEvent() && g_cfg.pushbullet.notify_lightning && g_cfg.pushbullet.token[0]) {
       lightning::Status ls = lightning::status();
       char body[96];

@@ -4,7 +4,7 @@
 Usage:  python tools/make_installer.py [--build] [--out installer]
 Needs a completed `pio run` (or --build to run it) and esptool (`pip install "esptool~=4.8"`).
 """
-import argparse, hashlib, json, os, pathlib, re, shutil, subprocess, sys
+import argparse, hashlib, json, os, pathlib, re, shutil, struct, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENV = "seengreat_hub75_s3"
@@ -19,6 +19,19 @@ def boot_app0():
     for p in home.glob("packages/framework-arduinoespressif32*/tools/partitions/boot_app0.bin"):
         return p
     sys.exit("boot_app0.bin not found in the PlatformIO packages")
+
+def voice_pack(out):
+    """Describes the newest voice pack in the output directory (built by tools/make_voice_pack.py), or None."""
+    packs = sorted(out.glob("voice-*.pack"))
+    if not packs:
+        return None
+    pack = packs[-1]
+    data = pack.read_bytes()
+    magic, fmt, hlen, rate, count, ver, *_rest, file_size, voice = struct.unpack("<4sHHIIIIIIII32s", data[:72])
+    if magic != b"MWCV" or file_size != len(data):
+        sys.exit(f"{pack.name}: not a valid voice pack")
+    return {"file": pack.name, "size": len(data), "md5": hashlib.md5(data).hexdigest(), "version": ver, "format": fmt,
+            "voice": voice.rstrip(b"\0").decode(), "rate": rate, "clips": count}
 
 def main():
     ap = argparse.ArgumentParser()
@@ -56,8 +69,12 @@ def main():
         "ota_size": len(ota_bytes),
         "ota_md5": hashlib.md5(ota_bytes).hexdigest(),
     }
+    voice = voice_pack(out)
+    if voice:
+        manifest["voice"] = voice    # spoken announcements: the firmware downloads this pack into LittleFS
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print(f"installer: {factory.name} ({factory.stat().st_size} bytes), {ota.name}, manifest.json (v{ver})")
+    print(f"installer: {factory.name} ({factory.stat().st_size} bytes), {ota.name}, manifest.json (v{ver})"
+          + (f", voice pack {voice['file']} ({voice['clips']} clips)" if voice else ", no voice pack"))
 
 if __name__ == "__main__":
     main()

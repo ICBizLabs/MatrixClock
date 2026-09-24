@@ -220,6 +220,18 @@ progress{width:100%;height:10px}
   <button class="btn sec" onclick="post('/api/test/chime',{force:true})">Test chime</button>
   <select id="trysound"><option value="two_tone">Two tone</option><option value="triple_beep">Triple beep</option><option value="chirp">Chirp</option><option value="alarm_beeps">Alarm clock beeps</option><option value="doorbell">Doorbell</option><option value="arpeggio">Arpeggio</option><option value="sonar">Sonar ping</option><option value="sos">Morse SOS</option><option value="siren_hilo">Siren: hi-lo</option><option value="siren_wail">Siren: wail</option><option value="siren_yelp">Siren: yelp</option><option value="nws_1050">NOAA 1050 Hz warning tone</option><option value="eas_attention">EAS attention signal</option><option value="eas_full">EAS with data bursts</option></select><button class="btn sec" onclick="post('/api/test/chime',{style:$('#trysound').value,force:true})">Play</button><span class="msg" id="msg-audio"></span></div>
   <p class="msg">The EAS and NOAA tones are simulations of the broadcast signals for your own clock; this is not an official alerting device. Long sounds (sirens, EAS) play once per trigger and are never queued up.</p></div>
+ <div class="card"><h2>Spoken announcements</h2><div class="grid">
+  <label class="chk"><input data-k="audio.speech.enabled" type="checkbox">Speak after the chime</label>
+  <label class="chk"><input data-k="audio.speech.alerts" type="checkbox">Weather alerts: the event name ("Tornado Warning")</label>
+  <label class="chk"><input data-k="audio.speech.lightning" type="checkbox">"Lightning nearby"</label>
+  <label class="chk"><input data-k="audio.speech.alarms" type="checkbox">"Alarm" and "Timer finished" when the ring starts</label>
+  <label class="chk"><input data-k="audio.speech.demo" type="checkbox">Scenario names in demo mode (with demo sounds)</label>
+  <label>Say each announcement this many times<input data-k="audio.speech.repeat" type="number" min="1" max="3"></label>
+ </div><div class="row"><button class="btn" onclick="save('audio')">Save</button>
+  <button class="btn sec" id="voicedl" onclick="post('/api/voice/download')">Download voice pack</button>
+  <select id="sayphrase"><option value="">(voice pack not loaded)</option></select><button class="btn sec" onclick="post('/api/test/say',{text:$('#sayphrase').value,force:true})">Say</button><span class="msg" id="msg-voice"></span></div>
+  <table id="st-voice"></table>
+  <p class="msg">The clock speaks with a pre-rendered voice pack (about 2 MB, Piper TTS with the public-domain LJ Speech voice) that it downloads once from the update site and keeps in its flash; new packs arrive with updates. Announcements follow the chime's quiet hours and use the same volume.</p></div>
 </section>
 
 <section id="notify">
@@ -312,6 +324,13 @@ async function preview(){if(pvBusy||!$('#pvlive').checked||!$('#status').classLi
  const [w,h]=(r.headers.get('X-Frame-Size')||'64x32').split('x').map(Number);const cv=$('#pv');cv.width=w*8;cv.height=h*8;const g=cv.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,cv.width,cv.height);
  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*2;const v=b[i]|(b[i+1]<<8);if(!v)continue;const R=((v>>11)&31)*255/31,G=((v>>5)&63)*255/63,B=(v&31)*255/31;g.fillStyle='rgb('+R+','+G+','+B+')';g.beginPath();g.arc(x*8+4,y*8+4,3.2,0,6.283);g.fill();}
  }catch(e){}pvBusy=false;}
+let phrasesLoaded=false;
+function voiceStatus(V){const t=$('#st-voice');if(!t)return;t.innerHTML='';
+ row(t,'Voice pack',V.installed?(V.voice||'voice')+' v'+V.version+', '+V.clips+' phrases':'<span class="warn">not downloaded'+(V.available?' (v'+V.available+' available)':'')+'</span>');
+ row(t,'Status',(V.state||'idle')+(V.state==='downloading'?' '+V.progress+'%':'')+(V.error?' <span class="bad">'+V.error+'</span>':''));
+ const b=$('#voicedl');if(b)b.disabled=V.state==='downloading'||V.state==='verifying';
+ if(V.installed&&!phrasesLoaded){phrasesLoaded=true;fetch('/api/voice/phrases').then(r=>r.json()).then(j=>{const sel=$('#sayphrase');sel.innerHTML='';(j.phrases||[]).forEach(p=>{const o=document.createElement('option');o.value=p;o.textContent=p.replace(/\b\w/g,c=>c.toUpperCase());sel.appendChild(o)});sel.value='tornado warning'}).catch(()=>{phrasesLoaded=false})}
+ if(!V.installed)phrasesLoaded=false;}
 function row(t,k,v){t.insertAdjacentHTML('beforeend','<tr><td>'+k+'</td><td>'+v+'</td></tr>')}
 function ago(s){return s?Math.round(s/60)+' min ago':'never'}
 async function status(){try{const r=await fetch('/api/status');const s=await r.json();
@@ -327,7 +346,7 @@ async function status(){try{const r=await fetch('/api/status');const s=await r.j
  const D=s.demo||{};if(document.activeElement!==$('#demo'))$('#demo').checked=!!D.on;say('demo',D.on?'showing: '+D.scenario+' · '+Math.ceil(D.remaining_s/60)+' min left':'','ok');
  row(y,'Forecast / hourly screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
  row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
- row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
+ row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
  const U=s.update||{};const ut=$('#st-update');if(ut){ut.innerHTML='';row(ut,'Installed','v'+U.current);row(ut,'Latest',U.latest?'v'+U.latest+(U.state==='available'?' <span class="warn">new version available</span>':U.state==='up-to-date'?' <span class="ok">up to date</span>':''):'not checked yet');
   row(ut,'Status',U.state+(U.state==='downloading'?' '+U.progress+'%':'')+(U.error?' <span class="bad">'+U.error+'</span>':'')+(U.last_check_age_s>=0?' · checked '+ago(U.last_check_age_s):''));$('#installbtn').disabled=U.state!=='available';}
  if(U.state==='available')row(y,'Update','<span class="warn">v'+U.latest+' available</span> (Update tab)');

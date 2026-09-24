@@ -64,6 +64,7 @@ namespace renderer {
       bool night = false, ringing = false, ringTimer = false, timer = false, lightningPage = false;
       bool sound = false, soundPending = false;
       uint8_t soundStyle = 0;
+      const char* soundPhrase = nullptr;
       uint32_t timerEnd = 0, lastRing = 0;
       uint8_t page = 255;          // 255 = rotate normally
       Screen screen = Screen::Composite;
@@ -352,6 +353,7 @@ namespace renderer {
       demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
       demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
     }
+    constexpr uint8_t DEMO_COUNT = 22;
     void demoApply(uint8_t i, uint32_t now) {
       demo.idx = i;
       demo.av = AlertView(); demo.ls = lightning::Status(); demo.theme = nullptr;
@@ -388,15 +390,27 @@ namespace renderer {
         case 21: demo.name = "night mode"; demo.night = true; break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
-      // sounds that a real event would produce (alert chime, lightning chime, message chime); alarms repeat in tick()
-      if (demo.sound && (i == 5 || i == 11 || i == 16)) { demo.soundPending = true; demo.soundStyle = (uint8_t)(i == 11 ? g_cfg.audio.chime_extreme : g_cfg.audio.chime); }
+      // sounds that a real event would produce (alert chime, lightning chime, message chime, alarm beeps) plus the
+      // spoken scenario name from the voice pack; alarm scenarios keep repeating their beeps in tick()
+      static const char* const SPOKEN[DEMO_COUNT] = {
+        "sunny", "date", "rain", "snow", "thunderstorm", "lightning nearby", "wind", "high and low", "sunrise and sunset",
+        "forecast", "hourly graph", "tornado warning", "winter storm watch", "alarm", "timer", "timer finished", "message",
+        "christmas", "fourth of july", "valentine's day", "halloween", "night mode" };
       demo.lastRing = 0;
+      if (demo.sound) {
+        demo.soundPending = true;
+        demo.soundPhrase = i < DEMO_COUNT ? SPOKEN[i] : nullptr;
+        ChimeStyle cs = ChimeStyle::None;
+        if (i == 11) cs = g_cfg.audio.chime_extreme;
+        else if (i == 5 || i == 16) cs = g_cfg.audio.chime;
+        else if (i == 13 || i == 15) { cs = ChimeStyle::TripleBeep; demo.lastRing = now; }
+        demo.soundStyle = (uint8_t)cs;
+      }
       if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; }
       else if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
       pageSince = now;
       transFrom = 255;
     }
-    constexpr uint8_t DEMO_COUNT = 22;
 
     // copies the page canvas into the bottom half; black is transparent so effects show behind the content
     void blitBottom(Canvas& c, const Canvas& pc, int16_t dx) {
@@ -568,10 +582,11 @@ namespace renderer {
   }
   bool demoActive() { return demo.on; }
   bool demoSound() { return demo.on && demo.sound; }
-  bool consumeDemoSound(uint8_t& style) {
+  bool consumeDemoSound(uint8_t& style, const char*& phrase) {
     if (!demo.on || !demo.soundPending) return false;
     demo.soundPending = false;
     style = demo.soundStyle;
+    phrase = demo.soundPhrase;
     return true;
   }
   const char* demoScenario() { return demo.on ? demo.name : ""; }
@@ -606,7 +621,7 @@ namespace renderer {
     if (lightning::consumeStrikeEvent()) { strikeFlashUntil = now + 220; strikeX = 6 + random(W - 12); }
     if (demo.on && demo.lightningPage && now - demo.lastStrike > 3000) { demo.lastStrike = now; strikeFlashUntil = now + 220; strikeX = 6 + random(W - 12); }
     if (demo.on && demo.sound && demo.ringing && (demo.lastRing == 0 || now - demo.lastRing >= 6000)) {   // alarm / timer-done repeat
-      demo.lastRing = now; demo.soundPending = true; demo.soundStyle = (uint8_t)ChimeStyle::TripleBeep;
+      demo.lastRing = now; demo.soundPending = true; demo.soundStyle = (uint8_t)ChimeStyle::TripleBeep; demo.soundPhrase = nullptr;
     }
     struct tm lt = {};
     uint16_t ms = 0;
