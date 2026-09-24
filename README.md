@@ -64,6 +64,28 @@ Pin map used by the firmware (`include/pins.h`):
 | HUB75 LAT / OE / CLK | 11 / 13 / 12 | I2C SDA / SCL (RTC, codec, expander) | 1 / 2 |
 | micro-SD SPI (unused) | 42 41 40 39 | BOOT button | 0 |
 
+## Install from your browser
+
+The easiest way to flash a board is the web installer, which uses Web Serial (Chrome or Edge on a computer):
+
+1. Open **https://icbizlabs.github.io/MatrixClock/** (published by the build workflow from the `installer/` folder;
+   it goes live once GitHub Pages is enabled for the repository).
+2. Connect the board's programming USB-C port, click **Install Matrix Clock**, pick the serial port and choose "erase"
+   on a first install. If the port is missing, hold BOOT, tap RST, release BOOT and try again.
+3. When it reboots, join the `MatrixClock-XXXX` network and open http://4.3.2.1/ to finish setup.
+
+The same page works from your own machine, because browsers treat `localhost` as a secure origin:
+
+```sh
+cd installer
+python -m http.server 8000      # then open http://localhost:8000/ in Chrome or Edge
+```
+
+`installer/` also holds the images directly: `matrix-clock-<version>-factory.bin` (whole flash, write at offset 0 with
+esptool) and `matrix-clock-<version>-ota.bin` (upload from the clock's Update tab). Every push to `main` rebuilds the
+firmware on GitHub Actions; the images are attached to each workflow run as an artifact, so no local toolchain is
+needed to get a fresh build. `python tools/make_installer.py --build` regenerates the folder locally.
+
 ## Building and flashing
 
 Requirements: [PlatformIO Core](https://platformio.org/install/cli) (`pip install platformio`) and Python 3 (used
