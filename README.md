@@ -159,6 +159,11 @@ Captured from a running clock through `GET /api/frame` (demo mode supplies the s
 the alert screens further down are simulated renderings with the same layout, fonts and colours. Animated GIFs live in
 `docs/screens/gif/`, still PNGs of the same scenes in `docs/screens/`.
 
+<img src="docs/screens/gif/showreel.gif" width="512" alt="Showreel: every example screen in turn, with captions">
+
+*Every screen in turn (about two minutes): pages, effects, forecast, hourly graph, indoor sensor, radar, alerts, alarm,
+timer, message, holiday themes, night mode, test pattern and update. Individual scenes follow below.*
+
 <img src="docs/screens/gif/rotation.gif" width="384" alt="Pages rotating with slide transitions">
 
 *Page rotation with slide transitions, then the forecast screen.*
