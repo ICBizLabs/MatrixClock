@@ -259,7 +259,9 @@ progress{width:100%;height:10px}
 <script>
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 let cfg=null;
-$$('nav button').forEach(b=>b.onclick=()=>{$$('nav button').forEach(x=>x.classList.toggle('on',x===b));$$('main section').forEach(s=>s.classList.toggle('on',s.id===b.dataset.tab));});
+function showTab(id){$$('nav button').forEach(x=>x.classList.toggle('on',x.dataset.tab===id));$$('main section').forEach(s=>s.classList.toggle('on',s.id===id));}
+$$('nav button').forEach(b=>b.onclick=()=>{showTab(b.dataset.tab);history.replaceState(null,'','#'+b.dataset.tab);});
+if(location.hash&&$('#'+location.hash.slice(1)))showTab(location.hash.slice(1));
 function get(o,p){return p.split('.').reduce((a,k)=>a==null?undefined:a[k],o)}
 function set(o,p,v){const ks=p.split('.');let a=o;ks.slice(0,-1).forEach(k=>{a=a[k]=a[k]||{}});a[ks.at(-1)]=v}
 function fill(){$$('[data-k]').forEach(el=>{let v=get(cfg,el.dataset.k);if(v===undefined)return;

@@ -74,6 +74,8 @@ The easiest way to flash a board is the web installer, which uses Web Serial (Ch
    on a first install. If the port is missing, hold BOOT, tap RST, release BOOT and try again.
 3. When it reboots, join the `MatrixClock-XXXX` network and open http://4.3.2.1/ to finish setup.
 
+<img src="docs/ui/installer.png" width="560" alt="Web installer page with the Install Matrix Clock button">
+
 The same page works from your own machine, because browsers treat `localhost` as a secure origin:
 
 ```sh
@@ -124,6 +126,8 @@ are kept across updates.
    latitude and longitude (the lookup uses Open-Meteo's geocoding service from your browser), choose the time zone, units, and enter a contact e-mail. The NWS API requires a contact in every
    request; alerts stay disabled until one is set.
 5. From now on the UI is at http://matrixclock.local/ (or the IP shown in the header).
+
+<img src="docs/ui/setup-wifi.png" width="640" alt="WiFi tab while the clock runs its setup access point">
 
 ## Screens
 
@@ -177,6 +181,27 @@ below); the clock stays visible throughout.
 <img src="docs/screens/tornado_strip.png" width="192" alt="Tornado warning banner scrolling, four frames half a second apart">
 
 *Four frames, half a second apart: the banner scrolls left while the frame flashes.*
+
+## Web interface
+
+Everything is configured from the clock's own page at http://matrixclock.local/. The Status tab shows a live view of
+the panel, current conditions, active alerts with acknowledge and test buttons, and system health; the other tabs
+hold the settings. Changes apply immediately except panel driver settings, which need a reboot.
+
+<img src="docs/ui/ui-status.png" width="720" alt="Status tab: live view of the panel, current weather, alerts and system health">
+
+| | |
+|---|---|
+| <img src="docs/ui/ui-weather.png" alt="Location & Weather tab"> | <img src="docs/ui/ui-display.png" alt="Display tab"> |
+| Location & Weather: coordinates with city/ZIP search, time zone, units, NWS alert filters, lightning | Display: brightness schedule, night mode, pages, effects, colours |
+| <img src="docs/ui/ui-alarms.png" alt="Alarms tab"> | <img src="docs/ui/ui-update.png" alt="Update tab"> |
+| Alarms: countdown timer and four alarms with weekdays | Update: automatic updates, settings backup, firmware upload |
+| <img src="docs/ui/ui-panel.png" alt="Panel tab"> | <img src="docs/ui/ui-notify.png" alt="Notify tab"> |
+| Panel: HUB75 driver settings and the test pattern | Notify: Pushbullet notifications in both directions |
+| <img src="docs/ui/ui-audio.png" alt="Audio tab"> | <img src="docs/ui/ui-wifi.png" alt="WiFi tab"> |
+| Audio: chime, volume, quiet hours | WiFi: network, hostname, setup AP password, factory reset |
+
+Screenshots are taken from the real page served with sample data; images live in `docs/ui/`.
 
 ## What the screen shows
 
