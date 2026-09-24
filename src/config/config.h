@@ -207,6 +207,7 @@ struct RadarConfig {              // animated NEXRAD loop from the Iowa Environm
   uint16_t hold_ms = 1500;        // pause on the newest frame
   uint8_t show_sec = 12;          // how long the radar screen stays
   uint8_t refresh_min = 5;        // new composite every 5 minutes
+  uint8_t base_map = 3;           // underlay from NASA GIBS: bit 0 = coastline, bit 1 = land / water tint (3 = both, 0 = none)
 };
 
 struct AppConfig {

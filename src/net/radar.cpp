@@ -13,6 +13,7 @@
 namespace radar {
   namespace {
     constexpr const char* BASE = "https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&STYLES=&SRS=EPSG:4326&FORMAT=image/png&TRANSPARENT=FALSE&BGCOLOR=0x000000";
+    constexpr const char* GIBS = "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&STYLES=&SRS=EPSG:4326&FORMAT=image/png&TRANSPARENT=TRUE";
     constexpr size_t MAX_PNG = 24 * 1024;
     constexpr uint32_t DUP_RETRY_MS = 60000UL;
     constexpr size_t FRAME_PX = (size_t)W * H;
@@ -28,6 +29,13 @@ namespace radar {
     uint32_t nextFetch = 0;
     volatile bool refreshRequested = false, resetRequested = false;
     int pngW = 0, pngH = 0;
+    uint8_t* base = nullptr;                    // W*H mask, BASE_* bits
+    uint8_t baseMode = 0;                       // cfg.radar.base_map the mask was built for
+    bool baseValid = false;
+    uint32_t baseNext = 0;
+    uint8_t baseFails = 0;
+    uint8_t baseBit = 0;                        // which layer the decoder is filling
+    uint8_t baseState = 0;
 
     bool take() { return mtx && xSemaphoreTake(mtx, pdMS_TO_TICKS(100)) == pdTRUE; }
     void give() { xSemaphoreGive(mtx); }
@@ -46,32 +54,93 @@ namespace radar {
       return 1;
     }
 
-    String url(const AppConfig& cfg, const char* layerSuffix) {
+    // GIBS base layers: OSM_Land_Water_Map is two flat greys (land 75, water 128); Coastlines_15m an anti-aliased
+    // light line with alpha. Fills the base mask straight from the decoder's raw RGBA / RGB line.
+    int drawBaseLine(PNGDRAW* d) {
+      if (d->y >= H || d->iWidth < 1) return 1;
+      const uint8_t* px = d->pPixels;
+      const int bpp = d->iPixelType == 6 ? 4 : (d->iPixelType == 2 ? 3 : 0);
+      if (!bpp || d->iBpp != 8) return 0;
+      for (int x = 0; x < W; x++) {
+        int sx = pngW == W ? x : (int)((int32_t)x * pngW / W);
+        const uint8_t* p = px + sx * bpp;
+        uint8_t lum = (uint8_t)(((int)p[0] + p[1] + p[2]) / 3), a = bpp == 4 ? p[3] : 255;
+        uint8_t& m = base[d->y * W + x];
+        if (baseBit == BASE_COAST) { if (a >= 60 && lum >= 60) m |= BASE_COAST; }
+        else if (a >= 128) m |= lum >= 100 ? BASE_WATER : BASE_LAND;
+      }
+      return 1;
+    }
+
+    String bbox(const AppConfig& cfg) {
       const float r = (float)cfg.radar.radius_km;
       const float lat = cfg.location.lat, lon = cfg.location.lon;
       const float dlat = r / 111.32f, dlon = r / (111.32f * cosf(lat * (float)M_PI / 180.0f));
-      char bbox[96];
-      snprintf(bbox, sizeof(bbox), "%.4f,%.4f,%.4f,%.4f", lon - dlon, lat - dlat / 2, lon + dlon, lat + dlat / 2);   // 2r wide, r tall
+      char b[96];
+      snprintf(b, sizeof(b), "%.4f,%.4f,%.4f,%.4f", lon - dlon, lat - dlat / 2, lon + dlon, lat + dlat / 2);   // 2r wide, r tall
+      return String(b);
+    }
+
+    bool fetchPng(const String& u, String& err, size_t& got) {
+      http_util::Options opt;
+      opt.userAgent = MWC_USER_AGENT_NAME "/" MWC_VERSION;
+      opt.accept = "image/png";
+      opt.timeoutMs = 20000;
+      int code = 0;
+      bool ok = http_util::get(u, opt, [&](Stream& s, int len) -> bool { return http_util::readBody(s, len, pngBuf, MAX_PNG, got, err); }, err, &code);
+      if (!ok) return false;
+      if (got < 8 || memcmp(pngBuf, "\x89PNG", 4) != 0) { err = "not a PNG (service error?)"; return false; }
+      return true;
+    }
+
+    bool fetchBaseLayer(const AppConfig& cfg, const char* layer, uint8_t bit, String& err) {
+      String u = GIBS;
+      u += "&LAYERS="; u += layer;
+      u += "&BBOX="; u += bbox(cfg);
+      u += "&WIDTH="; u += W; u += "&HEIGHT="; u += H;
+      size_t got = 0;
+      if (!fetchPng(u, err, got)) return false;
+      baseBit = bit;
+      int rc = png->openRAM(pngBuf, (int)got, drawBaseLine);
+      if (rc != PNG_SUCCESS) { err = "png open failed"; return false; }
+      pngW = png->getWidth(); pngH = png->getHeight();
+      rc = png->decode(png, 0);
+      png->close();
+      if (rc != PNG_SUCCESS) { err = String("png decode error ") + rc; return false; }
+      return true;
+    }
+
+    void fetchBase(const AppConfig& cfg, uint32_t now) {
+      const uint8_t mode = cfg.radar.base_map & 3;
+      if (!base || !mode) { baseValid = false; baseState = 0; return; }
+      if (baseValid && baseMode == mode) return;
+      if ((int32_t)(now - baseNext) < 0) return;
+      baseState = 1;
+      String err;
+      memset(base, 0, FRAME_PX);
+      bool ok = true;
+      if ((mode & 2) && !fetchBaseLayer(cfg, "OSM_Land_Water_Map", BASE_LAND, err)) ok = false;
+      if (ok && (mode & 1) && !fetchBaseLayer(cfg, "Coastlines_15m", BASE_COAST, err)) ok = false;
+      if (ok) { baseValid = true; baseMode = mode; baseFails = 0; baseState = 2; LOGI("radar: base map loaded (%s)", mode == 3 ? "coast + water" : mode == 2 ? "water" : "coast"); }
+      else {
+        if (baseFails < 10) baseFails++;
+        baseNext = now + min<uint32_t>(5UL * 60000UL * baseFails, 60UL * 60000UL);
+        baseState = 3;
+        LOGW("radar: base map: %s", err.c_str());
+      }
+    }
+
+    String url(const AppConfig& cfg, const char* layerSuffix) {
       String u = BASE;
       u += "&LAYERS=nexrad-n0r"; u += layerSuffix;
-      u += "&BBOX="; u += bbox;
+      u += "&BBOX="; u += bbox(cfg);
       u += "&WIDTH="; u += W; u += "&HEIGHT="; u += H;
       return u;
     }
 
     bool fetchLayer(const AppConfig& cfg, const char* suffix, String& err) {
-      http_util::Options opt;
-      opt.userAgent = MWC_USER_AGENT_NAME "/" MWC_VERSION;
-      opt.accept = "image/png";
-      opt.timeoutMs = 20000;
       size_t got = 0;
-      int code = 0;
-      bool ok = http_util::get(url(cfg, suffix), opt, [&](Stream& s, int len) -> bool {
-        // the map server answers HTTP/1.0 requests without a Content-Length and closes the connection after the body
-        return http_util::readBody(s, len, pngBuf, MAX_PNG, got, err);
-      }, err, &code);
-      if (!ok) return false;
-      if (got < 8 || memcmp(pngBuf, "\x89PNG", 4) != 0) { err = "not a PNG (service error?)"; return false; }
+      if (!fetchPng(url(cfg, suffix), err, got)) return false;   // HTTP/1.0: body ends when the server closes
       memset(work, 0, FRAME_PX * 2);
       int rc = png->openRAM(pngBuf, (int)got, drawLine);
       if (rc != PNG_SUCCESS) { err = "png open failed"; return false; }
@@ -112,17 +181,20 @@ namespace radar {
     frames = (uint16_t*)heap_caps_calloc(MAX_FRAMES * FRAME_PX, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     work = (uint16_t*)heap_caps_malloc(FRAME_PX * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     pngBuf = (uint8_t*)heap_caps_malloc(MAX_PNG, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    base = (uint8_t*)heap_caps_calloc(FRAME_PX, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     png = new PNG();
     if (!frames || !work || !pngBuf || !png) LOGE("radar: no memory");
     nextFetch = millis() + 20000UL;
   }
 
-  void applyConfig() { resetRequested = true; net_task::kick(net_task::JOB_RADAR); }
+  void applyConfig() { resetRequested = true; baseValid = false; baseNext = 0; net_task::kick(net_task::JOB_RADAR); }
   void requestRefresh() { refreshRequested = true; net_task::kick(net_task::JOB_RADAR); }
 
   bool due(const AppConfig& cfg, uint32_t now) {
     if (!cfg.radar.enabled || !frames) return false;
-    return refreshRequested || resetRequested || (int32_t)(now - nextFetch) >= 0;
+    const uint8_t mode = cfg.radar.base_map & 3;
+    const bool baseDue = mode && (!baseValid || baseMode != mode) && (int32_t)(now - baseNext) >= 0;
+    return refreshRequested || resetRequested || baseDue || (int32_t)(now - nextFetch) >= 0;
   }
 
   void run(const AppConfig& cfg) {
@@ -130,8 +202,10 @@ namespace radar {
     st.enabled = cfg.radar.enabled;
     if (resetRequested) { resetRequested = false; if (take()) { count = 0; analyse(); give(); } }
     if (!cfg.radar.enabled || !wifi_mgr::isConnected()) return;
-    refreshRequested = false;
     const uint32_t now = millis();
+    fetchBase(cfg, now);
+    if (!refreshRequested && count && (int32_t)(now - nextFetch) < 0) return;   // only the base map was due
+    refreshRequested = false;
     const uint32_t period = (uint32_t)(cfg.radar.refresh_min ? cfg.radar.refresh_min : 5) * 60000UL;
     String err;
     bool ok = true;
@@ -162,7 +236,7 @@ namespace radar {
     else { nextFetch = now + min<uint32_t>(period * st.fails, 30 * 60000UL); LOGW("radar: %s (retry in %lu min)", err.c_str(), (unsigned long)((nextFetch - now) / 60000UL)); }
   }
 
-  Status status() { Status c = {}; if (take()) { c = st; c.frames = count; give(); } return c; }
+  Status status() { Status c = {}; if (take()) { c = st; c.frames = count; c.base_state = baseState; give(); } return c; }
   uint8_t frameCount() { return count; }
   int32_t frameAgeMin(uint8_t i) {
     int32_t a = -1;
@@ -187,4 +261,19 @@ namespace radar {
     return n;
   }
   bool echoNearby() { bool e = false; if (take()) { e = count > 0 && st.echo_near; give(); } return e; }
+  bool copyBase(uint8_t* out) {
+    if (!base || !baseValid) return false;
+    if (!take()) return false;
+    memcpy(out, base, FRAME_PX);
+    give();
+    return true;
+  }
+  size_t copyBaseBytes(uint8_t* out, size_t offset, size_t maxLen) {
+    if (!base || !baseValid || offset >= FRAME_PX) return 0;
+    if (!take()) return 0;
+    size_t n = min(maxLen, FRAME_PX - offset);
+    memcpy(out, base + offset, n);
+    give();
+    return n;
+  }
 }

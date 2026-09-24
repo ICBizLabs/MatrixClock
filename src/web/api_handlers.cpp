@@ -173,6 +173,7 @@ namespace web {
         rd["echo_near"] = rs.echo_near;
         rd["echo_pct"] = rs.echo_pct;
         rd["newest_age_min"] = rs.frames ? radar::frameAgeMin(rs.frames - 1) : -1;
+        rd["base"] = rs.base_state == 2 ? "ready" : rs.base_state == 1 ? "loading" : rs.base_state == 3 ? "error" : "off";
       }
       {
         env_sensor::Reading er = env_sensor::reading();
@@ -411,11 +412,23 @@ namespace web {
       res->addHeader("Cache-Control", "no-store");
       r->send(res);
     });
+    server.on("/api/radar/base", HTTP_GET, [](AsyncWebServerRequest* r) {
+      uint8_t probe;
+      if (!radar::copyBaseBytes(&probe, 0, 1)) { sendJsonError(r, 404, "no base map loaded"); return; }
+      AsyncWebServerResponse* res = r->beginChunkedResponse("application/octet-stream",
+        [](uint8_t* buf, size_t maxLen, size_t index) -> size_t { return radar::copyBaseBytes(buf, index, maxLen); });
+      char dims[16];
+      snprintf(dims, sizeof(dims), "%ux%u", radar::W, radar::H);
+      res->addHeader("X-Frame-Size", dims);
+      res->addHeader("Cache-Control", "no-store");
+      r->send(res);
+    });
     server.on("/api/radar", HTTP_GET, [](AsyncWebServerRequest* r) {
       auto* res = new AsyncJsonResponse(false);
       JsonObject root = res->getRoot();
       radar::Status rs = radar::status();
       root["enabled"] = rs.enabled; root["frames"] = rs.frames; root["error"] = rs.err; root["echo_near"] = rs.echo_near; root["echo_pct"] = rs.echo_pct;
+      root["base"] = rs.base_state == 2 ? "ready" : rs.base_state == 1 ? "loading" : rs.base_state == 3 ? "error" : "off";
       root["last_ok_age_s"] = rs.last_ok_ms ? (millis() - rs.last_ok_ms) / 1000 : -1;
       JsonArray ages = root["age_min"].to<JsonArray>();
       for (uint8_t i = 0; i < rs.frames; i++) ages.add(radar::frameAgeMin(i));

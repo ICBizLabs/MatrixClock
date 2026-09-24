@@ -401,6 +401,13 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (!getNum(o, "hold_ms", r.hold_ms, t, err, 0, 5000)) return false;
     if (!getNum(o, "show_sec", r.show_sec, t, err, 4, 60)) return false;
     if (!getNum(o, "refresh_min", r.refresh_min, t, err, 2, 30)) return false;
+    JsonVariantConst bm = o["base_map"];
+    if (!bm.isNull()) {
+      const char* m = bm | "both";
+      if (!strcmp(m, "none")) r.base_map = 0; else if (!strcmp(m, "coast")) r.base_map = 1; else if (!strcmp(m, "landwater")) r.base_map = 2; else if (!strcmp(m, "both")) r.base_map = 3;
+      else { err = "radar.base_map: none, coast, landwater or both"; return false; }
+      t = true;
+    }
     if (t) changed |= CHG_RADAR;
   }
 
@@ -603,6 +610,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["hold_ms"] = c.radar.hold_ms;
   o["show_sec"] = c.radar.show_sec;
   o["refresh_min"] = c.radar.refresh_min;
+  o["base_map"] = c.radar.base_map == 0 ? "none" : c.radar.base_map == 1 ? "coast" : c.radar.base_map == 2 ? "landwater" : "both";
 
   JsonArray al = dst["alarms"].to<JsonArray>();
   for (uint8_t i = 0; i < MAX_ALARMS; i++) {

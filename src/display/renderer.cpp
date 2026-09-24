@@ -46,6 +46,8 @@ namespace renderer {
     uint8_t cyclesSinceFull = 0, cyclesSinceRadar = 0;
     uint8_t fullTurn = 0;                       // round-robin over the enabled full screens
     uint16_t radarFrame[radar::W * radar::H];
+    uint8_t radarBase[radar::W * radar::H];
+    bool radarBaseOk = false;
     uint8_t radarIdx = 0;
     uint32_t radarNextAt = 0;
     bool radarLoaded = false;
@@ -470,7 +472,7 @@ namespace renderer {
         else if (i == 13 || i == 15) { cs = ChimeStyle::TripleBeep; demo.lastRing = now; }
         demo.soundStyle = (uint8_t)cs;
       }
-      if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; radarIdx = 0; radarLoaded = false; radarNextAt = now; }
+      if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; radarIdx = 0; radarLoaded = false; radarNextAt = now; radarBaseOk = g_cfg.radar.base_map && radar::copyBase(radarBase); }
       else if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
       pageSince = now;
       transFrom = 255;
@@ -519,6 +521,7 @@ namespace renderer {
     void startRadar(uint32_t now) {
       screen = Screen::Radar;
       radarIdx = 0; radarLoaded = false; radarNextAt = now;
+      radarBaseOk = g_cfg.radar.base_map && radar::copyBase(radarBase);
       screenUntil = now + (uint32_t)g_cfg.radar.show_sec * 1000UL;
       transFrom = 255;
     }
@@ -536,7 +539,20 @@ namespace renderer {
         else if (!radar::copyFrame(radarIdx, radarFrame)) memset(radarFrame, 0, sizeof(radarFrame));
         radarLoaded = true;
       }
-      c.drawRGBBitmap(0, 0, radarFrame, radar::W, radar::H);
+      // base map underneath (dim water tint, land stays dark, grey coastline), echoes on top; the values are picked
+      // for the panel's 2.2 gamma so the tint reads as a quiet blue and the coast as a thin grey line
+      constexpr uint16_t C_WATER = 0x0010, C_LAND = 0x0000, C_COAST = 0x8410;
+      const uint8_t mode = g_cfg.radar.base_map & 3;
+      for (int y = 0; y < radar::H; y++) for (int x = 0; x < radar::W; x++) {
+        const int i = y * radar::W + x;
+        uint16_t v = radarFrame[i];
+        if (!v && radarBaseOk) {
+          const uint8_t m = radarBase[i];
+          if ((mode & 1) && (m & radar::BASE_COAST)) v = C_COAST;
+          else if (mode & 2) v = (m & radar::BASE_WATER) ? C_WATER : ((m & radar::BASE_LAND) ? C_LAND : 0);
+        }
+        if (v) c.drawPixel(x, y, v);
+      }
       // home marker: a small blinking cross
       const bool on = (now / 350) & 1;
       const uint16_t mk = on ? 0xFFFF : 0x0000;

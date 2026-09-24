@@ -323,6 +323,11 @@ minutes-ago layers make an eleven-frame loop, so the direction and speed of what
 fill only the newest frame is fetched, every five minutes. A blinking cross marks home and the corner label counts the
 frame age down to "NOW".
 
+Under the echoes the clock draws a base map so the picture makes sense on a dry day: the coastline as a thin grey
+line and water as a dim blue tint, from NASA's Global Imagery Browse Services (the OpenStreetMap land/water mask and
+the Natural Earth coastlines), fetched once for your location and radius. The Display tab can switch to coastline
+only, water only or nothing.
+
 The loop takes its turn with the forecast and hourly screens every few page cycles, and while echoes sit near the
 centre of the picture or the current conditions report rain or snow it comes back every two page cycles. The Status
 tab plays the same loop enlarged with a "Show on the clock" button, `POST /api/show` with `screen=radar` does the same,
@@ -452,4 +457,6 @@ ported from Espressif's esp-bsp codec component (Apache-2.0). Spoken announcemen
 [Piper](https://github.com/rhasspy/piper) (MIT) using the `en_US-ljspeech-medium` voice, trained on the public-domain
 [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) dataset. Weather data by Open-Meteo, alerts by the US National
 Weather Service. Radar composites from the Iowa Environmental Mesonet at Iowa State University (NEXRAD data by the NWS),
-decoded with [PNGdec](https://github.com/bitbank2/PNGdec) (Apache-2.0).
+decoded with [PNGdec](https://github.com/bitbank2/PNGdec) (Apache-2.0). Coastlines and the land/water mask under the radar
+come from [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api)
+(Natural Earth coastlines, OpenStreetMap land/water data © OpenStreetMap contributors, ODbL).

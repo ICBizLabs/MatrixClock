@@ -18,7 +18,9 @@ namespace radar {
     char err[48];
     bool echo_near;           // echoes within the central third of the newest frame
     uint8_t echo_pct;         // percent of pixels with echoes in the newest frame
+    uint8_t base_state;       // 0 off, 1 loading, 2 ready, 3 error
   };
+  enum : uint8_t { BASE_WATER = 1, BASE_LAND = 2, BASE_COAST = 4 };   // bits of the base map mask
   void begin();
   void applyConfig();                            // CHG_RADAR / CHG_LOCATION: forget the frames, refetch
   void requestRefresh();
@@ -30,4 +32,6 @@ namespace radar {
   bool copyFrame(uint8_t i, uint16_t* out);      // W*H pixels
   size_t copyFrameBytes(uint8_t i, uint8_t* out, size_t offset, size_t maxLen);   // for the web preview
   bool echoNearby();
+  bool copyBase(uint8_t* out);                 // W*H mask bytes (BASE_* bits); false when no base map is loaded
+  size_t copyBaseBytes(uint8_t* out, size_t offset, size_t maxLen);
 }
