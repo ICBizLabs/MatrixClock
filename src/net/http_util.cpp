@@ -7,10 +7,13 @@
 #include "util/log.h"
 
 namespace http_util {
-  // The 16 KB TLS record buffers are allocated in PSRAM; the handshake still needs a few contiguous KB of internal RAM.
+  // The Arduino core builds mbedtls with CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC: the two 16 KB TLS record buffers and the
+  // handshake state must come from internal RAM, about 40 KB per connection. Below this the connect fails as
+  // "connection refused", so it is better to skip and say why.
   bool enoughMemoryForTls() {
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    if (largest >= 12 * 1024) return true;
+    size_t freeInt = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (largest >= 18 * 1024 && freeInt >= 46 * 1024) return true;
     LOGW("tls: skipped, largest internal block %u B (free %u B, psram %u B)", (unsigned)largest,
          (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT), (unsigned)ESP.getFreePsram());
     return false;

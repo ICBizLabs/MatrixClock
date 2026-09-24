@@ -1,6 +1,6 @@
 {
   "name": "Matrix Clock",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 0,
   "builds": [
@@ -8,15 +8,15 @@
       "chipFamily": "ESP32-S3",
       "parts": [
         {
-          "path": "matrix-clock-0.7.0-factory.bin",
+          "path": "matrix-clock-0.7.1-factory.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "ota": "matrix-clock-0.7.0-ota.bin",
-  "ota_size": 1581424,
-  "ota_md5": "e11d3b57b9ac0caf803da6f364c75b32",
+  "ota": "matrix-clock-0.7.1-ota.bin",
+  "ota_size": 1581696,
+  "ota_md5": "f2fbcbb6cc10c0030be0abdc4cbd1014",
   "voice": {
     "file": "voice-en_US-ljspeech-v4.pack",
     "size": 3839856,

@@ -45,8 +45,9 @@ namespace renderer {
     bool transFromLightning = false, showLightningPage = false, lightningTurn = false;
     uint8_t cyclesSinceFull = 0, cyclesSinceRadar = 0;
     uint8_t fullTurn = 0;                       // round-robin over the enabled full screens
-    uint16_t radarFrame[radar::W * radar::H];
-    uint8_t radarBase[radar::W * radar::H];
+    uint16_t* radarFrame = nullptr;             // PSRAM, W*H pixels (allocated in begin)
+    uint8_t* radarBase = nullptr;               // PSRAM, W*H mask bytes
+    constexpr size_t RADAR_PX = (size_t)radar::W * radar::H;
     bool radarBaseOk = false;
     uint8_t radarIdx = 0;
     uint32_t radarNextAt = 0;
@@ -472,7 +473,7 @@ namespace renderer {
         else if (i == 13 || i == 15) { cs = ChimeStyle::TripleBeep; demo.lastRing = now; }
         demo.soundStyle = (uint8_t)cs;
       }
-      if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; radarIdx = 0; radarLoaded = false; radarNextAt = now; radarBaseOk = g_cfg.radar.base_map && radar::copyBase(radarBase); }
+      if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; radarIdx = 0; radarLoaded = false; radarNextAt = now; radarBaseOk = radarBase && g_cfg.radar.base_map && radar::copyBase(radarBase); }
       else if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
       pageSince = now;
       transFrom = 255;
@@ -521,13 +522,13 @@ namespace renderer {
     void startRadar(uint32_t now) {
       screen = Screen::Radar;
       radarIdx = 0; radarLoaded = false; radarNextAt = now;
-      radarBaseOk = g_cfg.radar.base_map && radar::copyBase(radarBase);
+      radarBaseOk = radarBase && g_cfg.radar.base_map && radar::copyBase(radarBase);
       screenUntil = now + (uint32_t)g_cfg.radar.show_sec * 1000UL;
       transFrom = 255;
     }
     void drawRadar(Canvas& c, uint32_t now) {
       const uint8_t n = demo.on ? radar::MAX_FRAMES : radar::frameCount();
-      if (!n) { classicFont(c); c.drawTextCentered("NO RADAR", W / 2, 12, C_GREY); return; }
+      if (!n || !radarFrame || !radarBase) { classicFont(c); c.drawTextCentered("NO RADAR", W / 2, 12, C_GREY); return; }
       if (radarIdx >= n) radarIdx = 0;
       if ((int32_t)(now - radarNextAt) >= 0) {
         if (radarLoaded) { radarIdx = (uint8_t)((radarIdx + 1) % n); }
@@ -535,8 +536,8 @@ namespace renderer {
         radarNextAt = now + (radarIdx == n - 1 ? (uint32_t)g_cfg.radar.frame_ms + g_cfg.radar.hold_ms : (uint32_t)g_cfg.radar.frame_ms);
       }
       if (!radarLoaded) {
-        if (demo.on) memcpy(radarFrame, demoRadar + (size_t)radarIdx * radar::W * radar::H, sizeof(radarFrame));
-        else if (!radar::copyFrame(radarIdx, radarFrame)) memset(radarFrame, 0, sizeof(radarFrame));
+        if (demo.on) memcpy(radarFrame, demoRadar + (size_t)radarIdx * RADAR_PX, RADAR_PX * 2);
+        else if (!radar::copyFrame(radarIdx, radarFrame)) memset(radarFrame, 0, RADAR_PX * 2);
         radarLoaded = true;
       }
       // base map underneath (dim water tint, land stays dark, grey coastline), echoes on top; the values are picked
@@ -659,6 +660,8 @@ namespace renderer {
   }
 
   void begin(uint32_t now_ms) {
+    radarFrame = (uint16_t*)heap_caps_calloc(RADAR_PX, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    radarBase = (uint8_t*)heap_caps_calloc(RADAR_PX, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!msgMtx) msgMtx = xSemaphoreCreateMutex();
     if (!pageA) { pageA = new Canvas(W, BOTTOM_H); pageB = new Canvas(W, BOTTOM_H); }
     screen = Screen::Splash;

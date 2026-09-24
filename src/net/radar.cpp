@@ -1,5 +1,6 @@
 #include "radar.h"
 #include <PNGdec.h>
+#include <new>
 #include <math.h>
 #include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
@@ -42,8 +43,9 @@ namespace radar {
 
     int drawLine(PNGDRAW* d) {   // returns 1 to keep decoding
       // nearest-neighbour into the 64x32 work frame in case the server returns another size
-      static uint16_t line[1024];
-      if (d->iWidth > 1024) return 0;
+      static uint16_t* line = nullptr;   // PSRAM
+      if (!line) line = (uint16_t*)heap_caps_malloc(1024 * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      if (!line || d->iWidth > 1024) return 0;
       PNG* p = (PNG*)d->pUser;
       p->getLineAsRGB565(d, line, PNG_RGB565_LITTLE_ENDIAN, 0xffffffff);
       if (pngW == W && pngH == H) { if (d->y < H) memcpy(work + d->y * W, line, W * 2); return 1; }
@@ -182,7 +184,8 @@ namespace radar {
     work = (uint16_t*)heap_caps_malloc(FRAME_PX * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     pngBuf = (uint8_t*)heap_caps_malloc(MAX_PNG, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     base = (uint8_t*)heap_caps_calloc(FRAME_PX, 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    png = new PNG();
+    void* pm = heap_caps_malloc(sizeof(PNG), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);   // decoder state stays out of internal RAM
+    png = pm ? new (pm) PNG() : nullptr;
     if (!frames || !work || !pngBuf || !png) LOGE("radar: no memory");
     nextFetch = millis() + 20000UL;
   }
@@ -215,7 +218,7 @@ namespace radar {
       for (int i = 0; i < 10 && ok; i++) {
         if (!fetchLayer(cfg, PAST[i], err)) { ok = false; break; }
         push(now - (uint32_t)(50 - 5 * i) * 60000UL);
-        delay(50);
+        delay(400);   // let lwIP release the previous TLS socket before the next one
       }
       if (ok && fetchLayer(cfg, "", err)) push(now); else ok = false;
     } else {

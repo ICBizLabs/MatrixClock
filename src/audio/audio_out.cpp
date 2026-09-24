@@ -7,6 +7,7 @@
 #include <math.h>
 #include <esp_random.h>
 #include <LittleFS.h>
+#include <esp_heap_caps.h>
 #include "es8311.h"
 #include "pins.h"
 #include "time/time_service.h"
@@ -28,7 +29,8 @@ namespace audio_out {
     SemaphoreHandle_t playMtx = nullptr;                // play() is called from the main loop, the net task and async_tcp
     int16_t sine[256];
     int16_t buf[FRAMES * 2];
-    uint8_t adpcmIn[2048];                               // 4096 samples (186 ms) per LittleFS read
+    uint8_t* adpcmIn = nullptr;                          // 2 KB clip read buffer in PSRAM (allocated in begin)
+    constexpr size_t ADPCM_IN = 2048;
     const char* suppressReason = "";
 
     void writeSilence(uint32_t ms) {
@@ -217,13 +219,14 @@ namespace audio_out {
     }
 
     void playClip(const ClipRef& c) {
+      if (!adpcmIn) return;
       File f = LittleFS.open(PACK_PATH, "r");
       if (!f || !f.seek(c.offset)) { LOGW("audio: clip open/seek failed"); return; }
       Adpcm st;
       uint32_t left = c.samples, bytesLeft = c.bytes;
       size_t fill = 0;
       while (left && bytesLeft) {
-        size_t want = bytesLeft < sizeof(adpcmIn) ? (size_t)bytesLeft : sizeof(adpcmIn);
+        size_t want = bytesLeft < ADPCM_IN ? (size_t)bytesLeft : ADPCM_IN;
         size_t n = f.read(adpcmIn, want);
         if (!n) break;
         bytesLeft -= n;
@@ -275,6 +278,7 @@ namespace audio_out {
     if (!codecAddr) { LOGW("audio: no ES8311 found, audio disabled"); return false; }
     for (int i = 0; i < 256; i++) sine[i] = (int16_t)(sinf(2.0f * (float)M_PI * i / 256.0f) * 32000.0f);
     buildUlaw();
+    adpcmIn = (uint8_t*)heap_caps_malloc(ADPCM_IN, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     i2s.setPins(pins::I2S_BCLK, pins::I2S_LRCK, pins::I2S_DOUT, pins::I2S_DIN, pins::I2S_MCLK);
     if (!i2s.begin(I2S_MODE_STD, RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO)) { LOGE("audio: I2S begin failed"); return false; }
     if (!es8311::init(codecAddr, RATE)) return false;

@@ -442,7 +442,9 @@ namespace web {
       minutes = constrain(minutes, 10L, 1440L);
       if (step <= 0) step = minutes <= 180 ? 1 : (minutes <= 720 ? 5 : 10);
       step = constrain(step, 1L, 60L);
-      static env_sensor::HistoryPoint pts[1440];
+      static env_sensor::HistoryPoint* pts = nullptr;   // 23 KB: lives in PSRAM, allocated on first use
+      if (!pts) pts = (env_sensor::HistoryPoint*)heap_caps_malloc(1440 * sizeof(env_sensor::HistoryPoint), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      if (!pts) { sendJsonError(r, 500, "no memory"); return; }
       size_t n = env_sensor::history(pts, minutes / step + 1, (uint16_t)minutes, (uint16_t)step);
       auto* res = new AsyncJsonResponse(false);
       JsonObject root = res->getRoot();
