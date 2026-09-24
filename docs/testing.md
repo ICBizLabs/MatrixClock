@@ -34,6 +34,10 @@ pio device monitor           # serial log at 115200
    speaks (a phrase that is not in the pack returns 404), a test alert plays its chime followed by the event name,
    a 5-second timer (`POST /api/timer {"seconds":5}`) beeps and says "Timer finished" once and then only beeps,
    and `POST '/api/demo?on=1&sound=1'` announces every scenario. Power-cycle: `speech.installed` stays true.
+   **Radar** – about 20 s after WiFi `/api/log` shows `radar: 11 frames, echoes N%`; `curl -s http://matrixclock.local/api/radar | jq .`
+   lists eleven ages from 50 down to 0 minutes; `curl -X POST http://matrixclock.local/api/show -d screen=radar` plays the
+   loop on the panel with the blinking home cross; the Status tab's Radar card plays it enlarged. With no rain within
+   100 km the frames are black apart from the marker, which is correct.
    **Indoor sensor** – with a BME280/BME680 wired to SDA 1 / SCL 2 the boot log shows `indoor: BME280 at 0x76`,
    `curl -s http://matrixclock.local/api/status | jq .indoor` has `valid: true` within 10 s, the `indoor` page appears in
    the rotation, and after 10 minutes the arrows start (breathe on the sensor: humidity rises, arrow up). The Status

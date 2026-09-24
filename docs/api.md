@@ -17,6 +17,9 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/test/chime` | `{style?, force}` plays a chime (`force` ignores quiet hours) |
 | POST | `/api/test/say` | `{text, force}` speaks a phrase from the voice pack ("Tornado Warning", "Lightning nearby", ...); 404 when the phrase is not in the pack, 409 without a pack or while another sound plays |
 | POST | `/api/voice/download` | fetch the manifest and (re)download the voice pack into LittleFS |
+| GET | `/api/radar` | radar loop state: `{enabled, frames, error, echo_near, echo_pct, last_ok_age_s, age_min[]}` |
+| GET | `/api/radar/frame?i=N` | frame N (0 = oldest) as raw RGB565 little-endian 64x32 (headers `X-Frame-Size`, `X-Frame-Age-Min`) |
+| POST | `/api/radar/refresh` | fetch the newest composite now |
 | GET | `/api/indoor/history[?minutes=180&step=1]` | indoor sensor history, oldest first: `{sensor, step_min, age_min[], temp_c[], humidity[], pressure_hpa[]}` (up to 1440 minutes) |
 | GET | `/api/voice/phrases` | `{installed, voice, version, phrases[]}`: every phrase the installed pack contains (packs are 8-bit µ-law at 22050 Hz; format 1 packs, 4-bit ADPCM, still play) |
 | POST | `/api/test/panel` | shows the test pattern; optional `sec=3..300` (default 10) |
@@ -31,7 +34,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/demo` | `on=1|0`, `minutes=N`, `sound=1|0`: cycle demo screens with sample data, auto-off after N minutes; with sound the alert, lightning, alarm, timer and message scenarios chime and every scenario says its name |
 | POST | `/api/update/check` | check the manifest for a newer version now |
 | POST | `/api/update/install` | download, verify and install the available version, then reboot |
-| POST | `/api/show` | `screen=forecast` or `screen=hourly` shows that full screen now |
+| POST | `/api/show` | `screen=forecast`, `screen=hourly` or `screen=radar` shows that full screen now |
 | POST | `/api/refresh` | fetch weather and alerts now |
 | GET | `/api/wifi/scan[?start=1|?poll=1]` | start / poll an async network scan |
 | GET | `/api/log` | text log ring buffer |
@@ -58,6 +61,7 @@ Configuration keys and defaults:
   "pushbullet": { "token": "", "device_iden": "", "notify_alerts": true, "notify_min_severity": "Severe", "notify_lightning": true,
                   "notify_alarms": false, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
   "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixClock/manifest.json", "check_hours": 6 },
+  "radar":    { "enabled": true, "radius_km": 100, "every_n_cycles": 4, "show_when_precip": true, "precip_every_n_cycles": 2, "frame_ms": 350, "hold_ms": 1500, "show_sec": 12, "refresh_min": 5 },
   "indoor":   { "enabled": true, "auto_page": true, "sample_sec": 10, "temp_offset": 0, "humidity_offset": 0, "altitude_m": -1, "sea_level": true, "pressure_unit": "auto", "trend_min": 60, "pressure_trend_min": 180 },
   "lightning": { "enabled": false, "server": "blitzortung.ha.sed.pl", "port": 1883, "radius_km": 40, "window_min": 15, "chime": true, "show_bolt": true },
   "alarms":   [ { "enabled": false, "time": "07:00", "days": "1111100", "chime": "triple_beep", "label": "" }, "... up to 4" ] }

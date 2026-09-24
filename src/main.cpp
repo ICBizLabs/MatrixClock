@@ -22,6 +22,7 @@
 #include "net/pushbullet.h"
 #include "net/updater.h"
 #include "net/voice_pack.h"
+#include "net/radar.h"
 #include "net/shared_state.h"
 #include "net/alert_store.h"
 #include "net/wifi_manager.h"
@@ -74,6 +75,7 @@ void setup() {
   alerts::begin();
   pushbullet::begin();
   updater::begin();
+  radar::begin();
 
   i2c_bus::begin();
   const i2c_bus::Map& i2c = i2c_bus::identify();

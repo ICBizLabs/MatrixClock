@@ -197,6 +197,18 @@ struct IndoorConfig {             // BME280 / BMP280 / BME680 on the I2C header 
   float temp_offset_c = 0;        // derived: temp_offset converted to C
 };
 
+struct RadarConfig {              // animated NEXRAD loop from the Iowa Environmental Mesonet WMS
+  bool enabled = true;
+  uint16_t radius_km = 100;       // half the width of the view (the panel shows 2 x radius wide, radius tall)
+  uint8_t every_n_cycles = 4;     // takes a turn among the full screens this often
+  bool show_when_precip = true;   // while echoes are near or it is raining / snowing: every precip_every_n_cycles
+  uint8_t precip_every_n_cycles = 2;
+  uint16_t frame_ms = 350;        // animation speed
+  uint16_t hold_ms = 1500;        // pause on the newest frame
+  uint8_t show_sec = 12;          // how long the radar screen stays
+  uint8_t refresh_min = 5;        // new composite every 5 minutes
+};
+
 struct AppConfig {
   WifiConfig wifi;
   LocationConfig location;
@@ -211,13 +223,14 @@ struct AppConfig {
   PushbulletConfig pushbullet;
   UpdateConfig update;
   IndoorConfig indoor;
+  RadarConfig radar;
   bool first_boot = true;
 };
 
 // Bit flags telling which sections a JSON merge touched (used to apply changes live / ask for a reboot)
 enum : uint16_t {
   CHG_WIFI = 1, CHG_LOCATION = 2, CHG_TIME = 4, CHG_WEATHER = 8,
-  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096
+  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192
 };
 
 extern AppConfig g_cfg;

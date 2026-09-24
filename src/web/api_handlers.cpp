@@ -16,6 +16,7 @@
 #include "audio/audio_out.h"
 #include "audio/voice.h"
 #include "net/voice_pack.h"
+#include "net/radar.h"
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
 #include "io/env_sensor.h"
@@ -162,6 +163,18 @@ namespace web {
       sp["available"] = vps.available_version;
       sp["error"] = vps.err;
       {
+        radar::Status rs = radar::status();
+        JsonObject rd = root["radar"].to<JsonObject>();
+        rd["enabled"] = rs.enabled;
+        rd["frames"] = rs.frames;
+        rd["last_ok_age_s"] = rs.last_ok_ms ? (millis() - rs.last_ok_ms) / 1000 : -1;
+        rd["error"] = rs.err;
+        rd["fails"] = rs.fails;
+        rd["echo_near"] = rs.echo_near;
+        rd["echo_pct"] = rs.echo_pct;
+        rd["newest_age_min"] = rs.frames ? radar::frameAgeMin(rs.frames - 1) : -1;
+      }
+      {
         env_sensor::Reading er = env_sensor::reading();
         JsonObject in = root["indoor"].to<JsonObject>();
         in["present"] = env_sensor::present();
@@ -239,7 +252,7 @@ namespace web {
       JsonArray reboot = root["reboot_required"].to<JsonArray>();
       struct { uint16_t bit; const char* name; bool reboot; } sections[] = {
         { CHG_WIFI, "wifi", false }, { CHG_LOCATION, "location", false }, { CHG_TIME, "time", false }, { CHG_WEATHER, "weather", false },
-        { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false },
+        { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false }, { CHG_RADAR, "radar", false },
         { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false } };
       for (auto& s : sections) if (changed & s.bit) (s.reboot ? reboot : applied).add(s.name);
       res->setLength();
@@ -382,6 +395,34 @@ namespace web {
     server.on("/api/update/check", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestCheck(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/update/install", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestInstall(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/voice/download", HTTP_POST, [](AsyncWebServerRequest* r) { voice_pack::requestDownload(); r->send(200, "application/json", "{\"ok\":true}"); });
+    server.on("/api/radar/frame", HTTP_GET, [](AsyncWebServerRequest* r) {
+      long i = r->hasParam("i") ? r->getParam("i")->value().toInt() : -1;
+      uint8_t n = radar::frameCount();
+      if (!n) { sendJsonError(r, 404, "no radar frames yet"); return; }
+      uint8_t idx = (i < 0 || i >= n) ? (uint8_t)(n - 1) : (uint8_t)i;
+      AsyncWebServerResponse* res = r->beginChunkedResponse("application/octet-stream",
+        [idx](uint8_t* buf, size_t maxLen, size_t index) -> size_t { return radar::copyFrameBytes(idx, buf, index, maxLen); });
+      char dims[16];
+      snprintf(dims, sizeof(dims), "%ux%u", radar::W, radar::H);
+      res->addHeader("X-Frame-Size", dims);
+      char age[16];
+      snprintf(age, sizeof(age), "%ld", (long)radar::frameAgeMin(idx));
+      res->addHeader("X-Frame-Age-Min", age);
+      res->addHeader("Cache-Control", "no-store");
+      r->send(res);
+    });
+    server.on("/api/radar", HTTP_GET, [](AsyncWebServerRequest* r) {
+      auto* res = new AsyncJsonResponse(false);
+      JsonObject root = res->getRoot();
+      radar::Status rs = radar::status();
+      root["enabled"] = rs.enabled; root["frames"] = rs.frames; root["error"] = rs.err; root["echo_near"] = rs.echo_near; root["echo_pct"] = rs.echo_pct;
+      root["last_ok_age_s"] = rs.last_ok_ms ? (millis() - rs.last_ok_ms) / 1000 : -1;
+      JsonArray ages = root["age_min"].to<JsonArray>();
+      for (uint8_t i = 0; i < rs.frames; i++) ages.add(radar::frameAgeMin(i));
+      res->setLength();
+      r->send(res);
+    });
+    server.on("/api/radar/refresh", HTTP_POST, [](AsyncWebServerRequest* r) { radar::requestRefresh(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/indoor/history", HTTP_GET, [](AsyncWebServerRequest* r) {
       long minutes = r->hasParam("minutes") ? r->getParam("minutes")->value().toInt() : 180;
       long step = r->hasParam("step") ? r->getParam("step")->value().toInt() : 0;

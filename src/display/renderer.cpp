@@ -16,6 +16,8 @@
 #include "net/wifi_manager.h"
 #include "net/lightning.h"
 #include "io/env_sensor.h"
+#include "net/radar.h"
+#include <esp_heap_caps.h>
 #include "time/time_service.h"
 #include "alarm/alarm.h"
 #include "util/timeutil.h"
@@ -24,7 +26,7 @@
 namespace renderer {
   namespace {
     using namespace layout;
-    enum class Screen : uint8_t { Splash, Composite, Forecast, Hourly, Test };
+    enum class Screen : uint8_t { Splash, Composite, Forecast, Hourly, Radar, Test };
     Screen screen = Screen::Splash;
     uint32_t screenUntil = 0, testStart = 0;
     bool otaActive = false;
@@ -41,8 +43,13 @@ namespace renderer {
     uint8_t transFrom = 255;       // page id sliding out, 255 = no transition running
     uint32_t transStart = 0;
     bool transFromLightning = false, showLightningPage = false, lightningTurn = false;
-    uint8_t cyclesSinceFull = 0;
-    bool nextFullIsHourly = false;
+    uint8_t cyclesSinceFull = 0, cyclesSinceRadar = 0;
+    uint8_t fullTurn = 0;                       // round-robin over the enabled full screens
+    uint16_t radarFrame[radar::W * radar::H];
+    uint8_t radarIdx = 0;
+    uint32_t radarNextAt = 0;
+    bool radarLoaded = false;
+    uint16_t* demoRadar = nullptr;              // demo mode: synthetic storm loop, radar::MAX_FRAMES frames
 
     Scroller banner, condScroll, msgScroll;
     WeatherData wx;
@@ -403,7 +410,8 @@ namespace renderer {
       demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
       demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
     }
-    constexpr uint8_t DEMO_COUNT = 23;
+    constexpr uint8_t DEMO_COUNT = 24;
+    void buildDemoRadar();
     void demoApply(uint8_t i, uint32_t now) {
       demo.idx = i;
       demo.av = AlertView(); demo.ls = lightning::Status(); demo.theme = nullptr;
@@ -443,6 +451,7 @@ namespace renderer {
                  demo.indoor.temp_c = 22.1f; demo.indoor.humidity = 44; demo.indoor.pressure_hpa = 1009.2f; demo.indoor.sea_level_hpa = 1013.6f;
                  demo.indoor.t_temp = env_sensor::Trend::Rising; demo.indoor.t_hum = env_sensor::Trend::Falling; demo.indoor.t_press = env_sensor::Trend::FallingFast;
                  demo.indoor.d_temp = 0.8f; demo.indoor.d_hum = -4; demo.indoor.d_press = -3.4f; demo.indoor.span_min = 180; break;
+        case 23: demo.name = "radar";      demo.wx = demoWeather(63, true, 58, 55, 91, 9, 14, 200); demo.screen = Screen::Radar; buildDemoRadar(); break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
       // sounds that a real event would produce (alert chime, lightning chime, message chime, alarm beeps) plus the
@@ -450,7 +459,7 @@ namespace renderer {
       static const char* const SPOKEN[DEMO_COUNT] = {
         "sunny", "date", "rain", "snow", "thunderstorm", "lightning nearby", "wind", "high and low", "sunrise and sunset",
         "forecast", "hourly graph", "tornado warning", "winter storm watch", "alarm", "timer", "timer finished", "message",
-        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor" };
+        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar" };
       demo.lastRing = 0;
       if (demo.sound) {
         demo.soundPending = true;
@@ -461,7 +470,7 @@ namespace renderer {
         else if (i == 13 || i == 15) { cs = ChimeStyle::TripleBeep; demo.lastRing = now; }
         demo.soundStyle = (uint8_t)cs;
       }
-      if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; }
+      if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; radarIdx = 0; radarLoaded = false; radarNextAt = now; }
       else if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
       pageSince = now;
       transFrom = 255;
@@ -479,6 +488,68 @@ namespace renderer {
           c.drawPixel(tx, BOTTOM_Y + y, v);
         }
       }
+    }
+
+    // ---- radar ----------------------------------------------------------------------------------------
+    // NWS reflectivity palette (5 dBZ steps from 5 to 75) used for the demo storm
+    const uint16_t DBZ_COL[15] = { 0x0774, 0x04FE, 0x001E, 0x07E0, 0x0620, 0x0460, 0xFFC0, 0xE5E0, 0xFCA0, 0xF800, 0xD000, 0xB800, 0xF81F, 0x9A98, 0xFFFF };
+    void buildDemoRadar() {
+      if (!demoRadar) demoRadar = (uint16_t*)heap_caps_malloc(radar::MAX_FRAMES * radar::W * radar::H * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      if (!demoRadar) return;
+      for (uint8_t k = 0; k < radar::MAX_FRAMES; k++) {
+        uint16_t* f = demoRadar + (size_t)k * radar::W * radar::H;
+        memset(f, 0, radar::W * radar::H * 2);
+        const float cx = 6.0f + k * 4.6f, cy = 27.0f - k * 1.4f;         // storm cell moving to the north-east
+        const float cx2 = 20.0f + k * 3.8f, cy2 = 6.0f + k * 0.6f;       // a smaller cell ahead of it
+        for (int y = 0; y < radar::H; y++) for (int x = 0; x < radar::W; x++) {
+          float dx = (x - cx) / 13.0f, dy = (y - cy) / 7.5f;
+          float d = sqrtf(dx * dx + dy * dy);
+          float dx2 = (x - cx2) / 6.0f, dy2 = (y - cy2) / 4.0f;
+          float d2 = sqrtf(dx2 * dx2 + dy2 * dy2);
+          float lvl = 0;
+          if (d < 1.0f) lvl = (1.0f - d) * 13.0f + ((x * 7 + y * 3 + k) % 5) * 0.4f;       // up to ~65 dBZ in the core
+          if (d2 < 1.0f) lvl = max(lvl, (1.0f - d2) * 7.0f);
+          if (lvl < 0.8f && ((x * 31 + y * 17 + k * 5) % 23) == 0 && d < 1.6f) lvl = 1;    // scattered light returns
+          if (lvl >= 0.8f) f[y * radar::W + x] = DBZ_COL[min(14, (int)lvl)];
+        }
+      }
+    }
+    bool isPrecipCode(uint8_t c) { return (c >= 51 && c <= 67) || (c >= 71 && c <= 77) || (c >= 80 && c <= 86) || c >= 95; }
+    bool radarAvailable() { return demo.on ? demoRadar != nullptr : (g_cfg.radar.enabled && radar::frameCount() > 0); }
+    void startRadar(uint32_t now) {
+      screen = Screen::Radar;
+      radarIdx = 0; radarLoaded = false; radarNextAt = now;
+      screenUntil = now + (uint32_t)g_cfg.radar.show_sec * 1000UL;
+      transFrom = 255;
+    }
+    void drawRadar(Canvas& c, uint32_t now) {
+      const uint8_t n = demo.on ? radar::MAX_FRAMES : radar::frameCount();
+      if (!n) { classicFont(c); c.drawTextCentered("NO RADAR", W / 2, 12, C_GREY); return; }
+      if (radarIdx >= n) radarIdx = 0;
+      if ((int32_t)(now - radarNextAt) >= 0) {
+        if (radarLoaded) { radarIdx = (uint8_t)((radarIdx + 1) % n); }
+        radarLoaded = false;
+        radarNextAt = now + (radarIdx == n - 1 ? (uint32_t)g_cfg.radar.frame_ms + g_cfg.radar.hold_ms : (uint32_t)g_cfg.radar.frame_ms);
+      }
+      if (!radarLoaded) {
+        if (demo.on) memcpy(radarFrame, demoRadar + (size_t)radarIdx * radar::W * radar::H, sizeof(radarFrame));
+        else if (!radar::copyFrame(radarIdx, radarFrame)) memset(radarFrame, 0, sizeof(radarFrame));
+        radarLoaded = true;
+      }
+      c.drawRGBBitmap(0, 0, radarFrame, radar::W, radar::H);
+      // home marker: a small blinking cross
+      const bool on = (now / 350) & 1;
+      const uint16_t mk = on ? 0xFFFF : 0x0000;
+      c.drawPixel(W / 2, H / 2, mk);
+      c.drawPixel(W / 2 - 1, H / 2, mk); c.drawPixel(W / 2 + 1, H / 2, mk); c.drawPixel(W / 2, H / 2 - 1, mk); c.drawPixel(W / 2, H / 2 + 1, mk);
+      // age of the frame, bottom left
+      tinyFont(c);
+      char lab[8];
+      int32_t age = demo.on ? (int32_t)(radar::MAX_FRAMES - 1 - radarIdx) * 5 : radar::frameAgeMin(radarIdx);
+      if (radarIdx == n - 1 || age <= 2) strlcpy(lab, "NOW", sizeof(lab)); else snprintf(lab, sizeof(lab), "-%ldM", (long)age);
+      int16_t tw = c.textWidth(lab);
+      c.fillRect(0, H - 6, tw + 2, 6, 0x0000);
+      c.drawText(lab, 1, H - 6, radarIdx == n - 1 ? 0xFFFF : C_GREY);
     }
 
     // ---- full screens ----------------------------------------------------------------------------------
@@ -584,7 +655,9 @@ namespace renderer {
   void requestTest(uint32_t hold_ms) { screen = Screen::Test; testStart = millis(); screenUntil = testStart + hold_ms; }
 
   bool requestFullScreen(const char* name) {
-    if (!wx.valid || otaActive) return false;
+    if (otaActive) return false;
+    if (!strcmp(name, "radar")) { if (!radarAvailable()) return false; startRadar(millis()); return true; }
+    if (!wx.valid) return false;
     if (!strcmp(name, "forecast") && wx.ndaily) screen = Screen::Forecast;
     else if (!strcmp(name, "hourly") && wx.nhourly >= 2) screen = Screen::Hourly;
     else return false;
@@ -595,7 +668,7 @@ namespace renderer {
 
   const char* fullScreenBlockReason() {
     const DisplayConfig& d = g_cfg.display;
-    if (!d.forecast_page && !d.hourly_page) return "both full screens disabled";
+    if (!d.forecast_page && !d.hourly_page && !g_cfg.radar.enabled) return "all full screens disabled";
     if (!wx.valid) return "no weather data yet";
     if (alarmclock::ringing()) return "alarm ringing";
     if (msg.active) return "message showing";
@@ -655,6 +728,7 @@ namespace renderer {
       case Screen::Splash: return "splash";
       case Screen::Forecast: return "forecast";
       case Screen::Hourly: return "hourly";
+      case Screen::Radar: return "radar";
       case Screen::Test: return "test";
       default: return demo.on ? "demo" : alarmclock::ringing() ? "alarm" : av.n ? "alert" : msg.active ? "message" : "clock";
     }
@@ -711,8 +785,11 @@ namespace renderer {
     const bool interrupt = ringing || alertFresh || msg.active || timerRun;   // blocks the full screens
 
     // an active full screen (forecast / hourly graph) owns the panel until its time is up
-    if (screen == Screen::Forecast || screen == Screen::Hourly) {
-      if ((int32_t)(now - screenUntil) < 0 && !interrupt) { if (screen == Screen::Forecast) drawForecast(c); else drawHourly(c); return; }
+    if (screen == Screen::Forecast || screen == Screen::Hourly || screen == Screen::Radar) {
+      if ((int32_t)(now - screenUntil) < 0 && !interrupt) {
+        if (screen == Screen::Forecast) drawForecast(c); else if (screen == Screen::Hourly) drawHourly(c); else drawRadar(c, now);
+        return;
+      }
       screen = Screen::Composite;
       pageSince = now;
       transFrom = 255;
@@ -733,22 +810,33 @@ namespace renderer {
           if (pageIdx >= d.npages) {
             pageIdx = 0;
             cyclesSinceFull++;
-            bool wantFull = (d.forecast_page || d.hourly_page) && wx.valid && !interrupt && !night && cyclesSinceFull >= d.forecast_every_n_cycles;
-            if (wantFull) {
-              cyclesSinceFull = 0;
-              bool hourly = nextFullIsHourly ? d.hourly_page : !d.forecast_page;
-              if (hourly && wx.nhourly < 2) hourly = false;
-              screen = hourly ? Screen::Hourly : Screen::Forecast;
-              nextFullIsHourly = !hourly;
-              screenUntil = now + 2UL * d.page_sec * 1000UL;
-              transFrom = 255;
+            cyclesSinceRadar++;
+            const bool radarOk = !interrupt && !night && radarAvailable();
+            const bool precip = radarOk && g_cfg.radar.show_when_precip && (radar::echoNearby() || (wx.valid && isPrecipCode(wx.cur.wmo)));
+            if (precip && cyclesSinceRadar >= g_cfg.radar.precip_every_n_cycles) {
+              // rain or snow around: the radar loop comes back every few page cycles on its own
+              cyclesSinceRadar = 0;
+              startRadar(now);
+            } else if (!interrupt && !night && cyclesSinceFull >= d.forecast_every_n_cycles) {
+              // round-robin over the enabled full screens: forecast, hourly graph, radar
+              Screen cand[3]; uint8_t nc = 0;
+              if (d.forecast_page && wx.valid && wx.ndaily) cand[nc++] = Screen::Forecast;
+              if (d.hourly_page && wx.valid && wx.nhourly >= 2) cand[nc++] = Screen::Hourly;
+              if (radarOk && !precip && g_cfg.radar.every_n_cycles && (cyclesSinceRadar + 1) >= g_cfg.radar.every_n_cycles / max<uint8_t>(1, d.forecast_every_n_cycles)) cand[nc++] = Screen::Radar;
+              if (nc) {
+                cyclesSinceFull = 0;
+                Screen pick = cand[fullTurn % nc];
+                fullTurn++;
+                if (pick == Screen::Radar) { cyclesSinceRadar = 0; startRadar(now); }
+                else { screen = pick; screenUntil = now + 2UL * d.page_sec * 1000UL; transFrom = 255; }
+              }
             }
           }
         }
       }
     }
-    if (screen == Screen::Forecast || screen == Screen::Hourly) {   // just switched to a full screen this tick
-      if (screen == Screen::Forecast) drawForecast(c); else drawHourly(c);
+    if (screen == Screen::Forecast || screen == Screen::Hourly || screen == Screen::Radar) {   // just switched to a full screen this tick
+      if (screen == Screen::Forecast) drawForecast(c); else if (screen == Screen::Hourly) drawHourly(c); else drawRadar(c, now);
       return;
     }
 

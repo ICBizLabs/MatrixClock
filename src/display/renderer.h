@@ -9,7 +9,7 @@ namespace renderer {
   void applyDisplay();                        // after a display config change
   void tick(Canvas& c, uint32_t now_ms);      // draws one frame and keeps panel brightness up to date
   void requestTest(uint32_t hold_ms);
-  bool requestFullScreen(const char* name);   // "forecast" or "hourly", shown now for two page periods
+  bool requestFullScreen(const char* name);   // "forecast", "hourly" (two page periods) or "radar" (radar.show_sec)
   const char* fullScreenBlockReason();        // "" when the periodic full screens can appear, else why not
   void setOta(bool active, uint8_t pct);
   void showIp(uint32_t hold_ms);

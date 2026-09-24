@@ -388,6 +388,22 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
   }
   c.indoor.temp_offset_c = c.weather.imperial ? c.indoor.temp_offset * 5.0f / 9.0f : c.indoor.temp_offset;
 
+  o = src["radar"];
+  if (!o.isNull()) {
+    t = false;
+    RadarConfig& r = c.radar;
+    if (!getBool(o, "enabled", r.enabled, t, err)) return false;
+    if (!getNum(o, "radius_km", r.radius_km, t, err, 25, 400)) return false;
+    if (!getNum(o, "every_n_cycles", r.every_n_cycles, t, err, 1, 20)) return false;
+    if (!getBool(o, "show_when_precip", r.show_when_precip, t, err)) return false;
+    if (!getNum(o, "precip_every_n_cycles", r.precip_every_n_cycles, t, err, 1, 20)) return false;
+    if (!getNum(o, "frame_ms", r.frame_ms, t, err, 100, 2000)) return false;
+    if (!getNum(o, "hold_ms", r.hold_ms, t, err, 0, 5000)) return false;
+    if (!getNum(o, "show_sec", r.show_sec, t, err, 4, 60)) return false;
+    if (!getNum(o, "refresh_min", r.refresh_min, t, err, 2, 30)) return false;
+    if (t) changed |= CHG_RADAR;
+  }
+
   JsonVariantConst al = src["alarms"];
   if (!al.isNull()) {
     if (!al.is<JsonArrayConst>()) { err = "alarms: expected an array"; return false; }
@@ -576,6 +592,17 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["pressure_unit"] = c.indoor.pressure_unit == 1 ? "hpa" : c.indoor.pressure_unit == 2 ? "inhg" : "auto";
   o["trend_min"] = c.indoor.trend_min;
   o["pressure_trend_min"] = c.indoor.pressure_trend_min;
+
+  o = dst["radar"].to<JsonObject>();
+  o["enabled"] = c.radar.enabled;
+  o["radius_km"] = c.radar.radius_km;
+  o["every_n_cycles"] = c.radar.every_n_cycles;
+  o["show_when_precip"] = c.radar.show_when_precip;
+  o["precip_every_n_cycles"] = c.radar.precip_every_n_cycles;
+  o["frame_ms"] = c.radar.frame_ms;
+  o["hold_ms"] = c.radar.hold_ms;
+  o["show_sec"] = c.radar.show_sec;
+  o["refresh_min"] = c.radar.refresh_min;
 
   JsonArray al = dst["alarms"].to<JsonArray>();
   for (uint8_t i = 0; i < MAX_ALARMS; i++) {

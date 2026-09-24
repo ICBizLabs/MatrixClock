@@ -42,6 +42,9 @@ arrives, and is configured entirely through its own web interface.
   hearts or sparkles on the day.
 - **Pushbullet**: new weather alerts, nearby lightning and alarms pushed to your phone; pushes sent to the clock
   (from the phone app, IFTTT or scripts) scroll on the panel.
+- **Animated weather radar**: an eleven-frame NEXRAD loop of the last 50 minutes around your location, full screen
+  on the panel with a blinking home marker. It takes turns with the forecast screens and comes back every couple of
+  page cycles while rain or snow is nearby.
 - **Indoor sensor**: plug a BME280, BMP280 or BME680 into the I2C header and the clock shows indoor temperature,
   humidity and barometric pressure with rising / falling arrows, keeps 24 hours of history and charts it in the web UI.
 - **Live view** of the panel in the web UI, settings backup and restore.
@@ -310,6 +313,21 @@ counts down in the bottom half and rings the same way.
 Messages: `POST /api/message` with `{"text": "...", "seconds": 60, "chime": true, "color": "#40C0FF"}` scrolls the
 text (0 seconds = until cleared with `POST /api/message/clear` or the wheel push). The Status tab has a form for it.
 
+## Weather radar
+
+The radar screen shows NEXRAD base reflectivity from the [Iowa Environmental Mesonet](https://mesonet.agron.iastate.edu/ogc/)
+map service (Iowa State University), which serves the national composite the NWS radars feed. The clock asks for a
+64x32 crop centred on your coordinates, 200 km wide by default, in the standard NWS colours on black: greens for light
+rain, yellow and orange for heavy rain, red and magenta for severe cores. The newest composite plus the 5 to 50
+minutes-ago layers make an eleven-frame loop, so the direction and speed of what is coming are obvious; after the first
+fill only the newest frame is fetched, every five minutes. A blinking cross marks home and the corner label counts the
+frame age down to "NOW".
+
+The loop takes its turn with the forecast and hourly screens every few page cycles, and while echoes sit near the
+centre of the picture or the current conditions report rain or snow it comes back every two page cycles. The Status
+tab plays the same loop enlarged with a "Show on the clock" button, `POST /api/show` with `screen=radar` does the same,
+and the Display tab sets radius, timing and how often it appears. US coverage only, like the NWS alerts.
+
 ## Indoor sensor
 
 Any board with a Bosch **BME280** (temperature, humidity, pressure), **BMP280** (no humidity) or **BME680 / BME688**
@@ -387,6 +405,7 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixcloc
 | Board resets when the panel goes bright | panel power supply too weak; lower *Max brightness cap* |
 | WiFi weak while the panel runs | raise TX power on the WiFi tab, route the ribbon cable away from the antenna |
 | No chime | Status tab shows whether the ES8311 was found; check volume, quiet hours, speaker connector |
+| Radar never appears | Status tab → System shows the radar state; it needs internet, a US location and about 20 s after WiFi for the first eleven frames; "NO RADAR" on the panel means no frames yet |
 | Indoor page says NO SENSOR | Status tab → System lists the I2C addresses; a BME280/BME680 answers at 0x76 or 0x77 (check SDO/address jumper, 3.3 V, SDA on GPIO 1, SCL on GPIO 2) |
 | Indoor temperature reads high | the board warms the sensor: move it on a short lead or set a negative offset on the Location & Weather tab |
 | Sounds are fuzzy or distorted | Volume 100 % is the codec's full scale; the small speaker distorts near the top, so try 50-70 %. Firmware before 0.5.1 applied digital gain above 75 %, which clipped: update |
@@ -412,7 +431,7 @@ src/main.cpp              boot order and the 30 fps frame loop
 src/app.*                 config staging from the web, reboot / factory reset
 src/config/               settings struct, JSON load/save/validation (LittleFS /config.json)
 src/display/              HUB75 bring-up, off-screen canvas with diff blit, renderer, icons, scroller, test pattern
-src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store, updater, voice pack download
+src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store, updater, voice pack download, radar loop
 src/time/                 NTP, time zone table, PCF85063 RTC driver
 src/audio/                ES8311 codec, I2S chime synthesizer, ADPCM voice-clip player, voice pack index
 src/io/                   I2C bus with device probing, PCA9557 expander, buttons, BME280/BME680 indoor sensor
@@ -432,4 +451,5 @@ AsyncTCP](https://github.com/ESP32Async), [ArduinoJson](https://arduinojson.org/
 ported from Espressif's esp-bsp codec component (Apache-2.0). Spoken announcements are rendered with
 [Piper](https://github.com/rhasspy/piper) (MIT) using the `en_US-ljspeech-medium` voice, trained on the public-domain
 [LJ Speech](https://keithito.com/LJ-Speech-Dataset/) dataset. Weather data by Open-Meteo, alerts by the US National
-Weather Service.
+Weather Service. Radar composites from the Iowa Environmental Mesonet at Iowa State University (NEXRAD data by the NWS),
+decoded with [PNGdec](https://github.com/bitbank2/PNGdec) (Apache-2.0).

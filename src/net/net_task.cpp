@@ -12,6 +12,7 @@
 #include "pushbullet.h"
 #include "updater.h"
 #include "voice_pack.h"
+#include "radar.h"
 #include "util/log.h"
 
 namespace net_task {
@@ -86,6 +87,8 @@ namespace net_task {
         if (paused) continue;
         now = millis();
         if (cfg.alerts.enabled && ((forced & JOB_ALERTS) || (int32_t)(now - nextAl) >= 0)) { forced &= ~JOB_ALERTS; runAlerts(cfg); }
+        if (paused) continue;
+        if ((forced & JOB_RADAR) || radar::due(cfg, millis())) { forced &= ~JOB_RADAR; radar::run(cfg); }
         if (paused) continue;
         forced &= ~JOB_PUSH;
         pushbullet::runQueued(cfg);
