@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Matrix Clock installer</title>
+<style>
+:root{--bg:#0f1114;--card:#1b1f26;--line:#2a303a;--fg:#d8dce3;--mut:#7e8794;--acc:#f5a623}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,"Segoe UI",Roboto,sans-serif;padding:32px 20px}
+main{max-width:680px;margin:0 auto}h1{font-size:28px;margin:0 0 6px}p{margin:10px 0}.mut{color:var(--mut)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin:22px 0}
+ol{padding-left:22px}li{margin:6px 0}code{background:#0a0c0f;padding:2px 6px;border-radius:4px;font-size:14px}
+esp-web-install-button{--esp-tools-button-color:var(--acc);--esp-tools-button-text-color:#1a1206;--esp-tools-button-border-radius:8px}
+button.install{background:var(--acc);color:#1a1206;border:0;border-radius:8px;padding:12px 20px;font:600 16px system-ui,sans-serif;cursor:pointer}
+.unsupported{color:#e5484d}a{color:var(--acc)}
+</style>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</head>
+<body>
+<main>
+<h1>Matrix Clock installer</h1>
+<p class="mut">Flash the firmware to the Seengreat RGB Matrix HUB75 S3 board straight from this page. Version <span id="ver">…</span>.</p>
+
+<div class="card">
+ <ol>
+  <li>Use Chrome or Edge on a computer (Web Serial is not available in Firefox, Safari or on phones).</li>
+  <li>Connect the board's <b>programming</b> USB-C port (not the panel-power port) to the computer.</li>
+  <li>Click Install, pick the board's serial port, and wait for the progress bar to finish. Choose "erase" on a first install.</li>
+  <li>The panel plays a test pattern, then starts the <code>MatrixClock-XXXX</code> WiFi network. Join it and open <a href="http://4.3.2.1/">http://4.3.2.1/</a> to finish setup.</li>
+ </ol>
+ <p><esp-web-install-button manifest="manifest.json">
+   <button slot="activate" class="install">Install Matrix Clock</button>
+   <span slot="unsupported" class="unsupported">This browser cannot access serial ports. Use Chrome or Edge on Windows, macOS, Linux or ChromeOS.</span>
+   <span slot="not-allowed" class="unsupported">Serial access needs a secure page: open this installer over HTTPS or from http://localhost.</span>
+ </esp-web-install-button></p>
+ <p class="mut">If the port does not appear: hold <b>BOOT</b>, tap <b>RST</b>, release <b>BOOT</b>, then click Install again. Later updates can be uploaded from the clock's own web page (Update tab) using the OTA image below.</p>
+</div>
+
+<p class="mut">Files: <a id="factory" href="#">factory image</a> (full flash, for this installer or esptool at offset 0) · <a id="ota" href="#">OTA image</a> (for the Update tab) · <a href="https://github.com/ICBizLabs/MatrixClock">source and documentation</a></p>
+<script>
+fetch('manifest.json').then(r=>r.json()).then(m=>{document.getElementById('ver').textContent=m.version;const f=m.builds[0].parts[0].path;document.getElementById('factory').href=f;document.getElementById('ota').href=f.replace('-factory.bin','-ota.bin');}).catch(()=>{document.getElementById('ver').textContent='unknown';});
+</script>
+</main>
+</body>
+</html>

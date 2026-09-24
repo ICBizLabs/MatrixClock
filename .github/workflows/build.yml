@@ -1,0 +1,62 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+      - name: Install PlatformIO and esptool
+        run: pip install platformio "esptool~=4.8"
+      - name: Build
+        run: pio run -e seengreat_hub75_s3
+      - name: Build web installer (factory image, OTA image, manifest)
+        run: python tools/make_installer.py --out installer
+      - name: Upload firmware images
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: |
+            installer/*.bin
+            installer/manifest.json
+      - name: Upload installer site for GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: installer
+
+  # Publishes the installer at https://<owner>.github.io/<repo>/ . GitHub Pages needs a public repository
+  # (or a paid plan); on a private repository this job fails harmlessly and the firmware artifact above is still built.
+  deploy-pages:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - id: deployment
+        uses: actions/deploy-pages@v4
