@@ -21,7 +21,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | GET | `/api/radar/frame?i=N` | frame N (0 = oldest) as raw RGB565 little-endian 64x32 (headers `X-Frame-Size`, `X-Frame-Age-Min`) |
 | GET | `/api/radar/base` | base map mask, one byte per pixel (bit 0 water, bit 1 land, bit 2 coastline), 64x32 |
 | POST | `/api/radar/refresh` | fetch the newest composite now |
-| GET | `/api/indoor/history[?minutes=180&step=1]` | indoor sensor history, oldest first: `{sensor, step_min, age_min[], temp_c[], humidity[], pressure_hpa[]}` (up to 1440 minutes) |
+| GET | `/api/indoor/history[?minutes=180&step=1]` | indoor sensor history, oldest first: `{sensor, has_gas, step_min, age_min[], temp_c[], humidity[], pressure_hpa[], gas_kohm[], air_score[]}` (up to 1440 minutes) |
 | GET | `/api/voice/phrases` | `{installed, voice, version, phrases[]}`: every phrase the installed pack contains (packs are 8-bit µ-law at 22050 Hz; format 1 packs, 4-bit ADPCM, still play) |
 | POST | `/api/test/panel` | shows the test pattern; optional `sec=3..300` (default 10) |
 | POST | `/api/message` | `{text, seconds (0 = until cleared), color "#RRGGBB", chime, force}` scrolls a message |
@@ -58,22 +58,25 @@ Configuration keys and defaults:
                 "colors": { "time": "#FFFFFF", "date": "#80C0FF", "temp": "#FFD060", "text": "#C0C0C0", "hi": "#FF8060", "lo": "#60A0FF" } },
   "panel":    { "width": 64, "height": 32, "chain": 1, "driver": "SHIFTREG", "clkphase": false, "latch_blanking": 2, "i2s_speed_hz": 8000000, "min_refresh_hz": 120, "max_brightness": 255, "color_depth_bits": 8, "double_buffer": false, "swap_rb": false },
   "audio":    { "enabled": true, "volume": 60, "chime": "two_tone", "chime_extreme": "eas_attention", "repeat_min": 0, "quiet": { "enabled": true, "start": "22:00", "end": "07:00" },
-                "speech": { "enabled": true, "alerts": true, "lightning": true, "alarms": true, "demo": true, "repeat": 1 } },
+                "speech": { "enabled": true, "alerts": true, "lightning": true, "alarms": true, "demo": true, "indoor": true, "repeat": 1 } },
   "pushbullet": { "token": "", "device_iden": "", "notify_alerts": true, "notify_min_severity": "Severe", "notify_lightning": true,
-                  "notify_alarms": false, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
+                  "notify_alarms": false, "notify_air": true, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
   "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixClock/manifest.json", "check_hours": 6 },
   "radar":    { "enabled": true, "radius_km": 100, "every_n_cycles": 4, "show_when_precip": true, "precip_every_n_cycles": 2, "frame_ms": 350, "hold_ms": 1500, "show_sec": 12, "refresh_min": 5, "base_map": "both" },
-  "indoor":   { "enabled": true, "auto_page": true, "sample_sec": 10, "temp_offset": 0, "humidity_offset": 0, "altitude_m": -1, "sea_level": true, "pressure_unit": "auto", "trend_min": 60, "pressure_trend_min": 180 },
+  "indoor":   { "enabled": true, "auto_page": true, "sample_sec": 10, "temp_offset": 0, "humidity_offset": 0, "altitude_m": -1, "sea_level": true, "pressure_unit": "auto", "trend_min": 60, "pressure_trend_min": 180,
+                "gas": true, "air_fair_below": 80, "air_poor_below": 60, "air_alert": true, "air_alert_min": 60 },
   "lightning": { "enabled": false, "server": "blitzortung.ha.sed.pl", "port": 1883, "radius_km": 40, "window_min": 15, "chime": true, "show_bolt": true },
   "alarms":   [ { "enabled": false, "time": "07:00", "days": "1111100", "chime": "triple_beep", "label": "" }, "... up to 4" ] }
 ```
 
-Pages: `date`, `temp`, `cond`, `wind`, `hilo`, `feels`, `sun`, `indoor` (BME280/BME680 readings with trend arrows). Alarm `days` is a 7-character string Monday..Sunday (`1` = on). Severities: `Unknown`, `Minor`, `Moderate`, `Severe`,
+Pages: `date`, `temp`, `cond`, `wind`, `hilo`, `feels`, `sun`, `indoor` (BME280/BME680 readings with trend arrows), `air` (BME680 air-quality score), `baro` (pressure and Zambretti forecast). Alarm `days` is a 7-character string Monday..Sunday (`1` = on). Severities: `Unknown`, `Minor`, `Moderate`, `Severe`,
 `Extreme`. Chimes: `none`, `two_tone`, `triple_beep`, `chirp`, `alarm_beeps`, `doorbell`, `arpeggio`, `sonar`, `sos`, `siren_hilo`, `siren_wail`,
 `siren_yelp`, `nws_1050`, `eas_attention`, `eas_full`. `audio.chime_extreme` is used for Extreme alerts, `audio.chime` for everything else. `audio.speech` controls the spoken announcements
 (the event name of a new alert, "Lightning nearby", "Alarm" / "Timer finished", demo scenario names; `repeat` 1..3); an alert event without
 a clip in the voice pack is announced as "Weather alert". `indoor.temp_offset` is in the display unit (F when `weather.units` is imperial); `indoor.altitude_m` -1 uses the
 elevation Open-Meteo reports; `pressure_unit` `auto` picks inHg with imperial units. Trend arrows in `/api/status.indoor` are `steady`, `rising`, `falling`,
-`rising fast`, `falling fast` (thresholds 0.5 C / 3 % over `trend_min`, 1 hPa over `pressure_trend_min`, fast = three times that). Drivers: `SHIFTREG`, `FM6124`, `FM6126A`,
+`rising fast`, `falling fast` (thresholds 0.5 C / 3 % over `trend_min`, 1 hPa over `pressure_trend_min`, fast = three times that). With a BME680 `indoor` also carries `gas_kohm`, `air_score` (0..100), `air_level` (`good`/`fair`/`poor`/`unknown`), `air_baseline_kohm`, `trend_air`;
+every humidity sensor adds `dew_point_c`, `abs_humidity` (g/m3), `heat_index_c`, `condensation` (`none`/`possible`/`likely`), `mould_risk` (`none`/`elevated`/`high`) and
+`forecast {text, z, trend}` (Zambretti, empty until 30 minutes of pressure history exist). Drivers: `SHIFTREG`, `FM6124`, `FM6126A`,
 `ICN2038S`, `MBI5124`, `DP3246`. Sending `"tz_id"` without `"tz_posix"` fills the POSIX string from the built-in
 US zone table. `wifi.pass` / `wifi.ap_pass` set to `"***"` keep the stored secret.

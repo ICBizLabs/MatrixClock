@@ -17,6 +17,7 @@
 #include "net/wifi_manager.h"
 #include "net/lightning.h"
 #include "io/env_sensor.h"
+#include "util/zambretti.h"
 #include "net/radar.h"
 #include <esp_heap_caps.h>
 #include "time/time_service.h"
@@ -55,7 +56,7 @@ namespace renderer {
     bool radarLoaded = false;
     uint16_t* demoRadar = nullptr;              // demo mode: synthetic storm loop, radar::MAX_FRAMES frames
 
-    Scroller banner, condScroll, msgScroll;
+    Scroller banner, condScroll, msgScroll, baroScroll;
     WeatherData wx;
     AlertView av;
     lightning::Status ls;
@@ -289,9 +290,45 @@ namespace renderer {
       x += pc.textWidth(b);
       drawTrend(pc, x, Y_L2 + 1, r.t_press);
     }
+    constexpr uint16_t C_AIR_GOOD = 0x3FE6, C_AIR_FAIR = 0xFFC0, C_AIR_POOR = 0xF9C0;
+    void drawAirPage(Canvas& pc, const env_sensor::Reading& r) {
+      classicFont(pc);
+      if (!r.valid || !r.has_gas) { pc.drawTextCentered(env_sensor::present() ? "NO GAS SENSOR" : "NO SENSOR", W / 2, Y_SINGLE, C_GREY); return; }
+      if (!r.air_ready) { pc.drawTextCentered("AIR", W / 2, Y_L1, colDate()); pc.drawTextCentered("WARMING UP", W / 2, Y_L2, C_GREY); return; }
+      const uint16_t col = r.air_level == env_sensor::AIR_GOOD ? C_AIR_GOOD : r.air_level == env_sensor::AIR_FAIR ? C_AIR_FAIR : C_AIR_POOR;
+      char b[16];
+      snprintf(b, sizeof(b), "AIR %d%%", (int)lroundf(r.air_score));
+      int16_t tw = pc.textWidth(b);
+      int16_t x = (int16_t)((W - tw - 5) / 2);
+      pc.drawText(b, x, Y_L1, colText());
+      drawTrend(pc, x + tw + 2, Y_L1 + 1, r.t_air);
+      const char* word = r.air_level == env_sensor::AIR_GOOD ? "GOOD" : r.air_level == env_sensor::AIR_FAIR ? "FAIR" : "POOR";
+      pc.drawTextCentered(word, W / 2, Y_L2, col);
+    }
+    void drawBaroPage(Canvas& pc, const env_sensor::Reading& r, uint32_t now) {
+      classicFont(pc);
+      if (!r.valid) { pc.drawTextCentered(env_sensor::present() ? "READING.." : "NO SENSOR", W / 2, Y_SINGLE, C_GREY); return; }
+      const bool imperial = g_cfg.weather.imperial;
+      const float hpa = (g_cfg.indoor.sea_level && r.sea_level_known) ? r.sea_level_hpa : r.pressure_hpa;
+      const bool inhg = g_cfg.indoor.pressure_unit == 2 || (g_cfg.indoor.pressure_unit == 0 && imperial);
+      char b[16];
+      if (inhg) snprintf(b, sizeof(b), "%.2f IN", hpa * 0.02953f); else snprintf(b, sizeof(b), "%d HPA", (int)lroundf(hpa));
+      int16_t tw = pc.textWidth(b);
+      int16_t x = (int16_t)((W - tw - 5) / 2);
+      pc.drawText(b, x, Y_L1, colText());
+      drawTrend(pc, x + tw + 2, Y_L1 + 1, r.t_press);
+      const char* txt;
+      if (r.span_min < 30) txt = "LEARNING TREND";
+      else txt = zambretti::forecast(r.sea_level_known ? r.sea_level_hpa : r.pressure_hpa, r.d_press, wx.valid ? wx.cur.wind_dir : -1).text;
+      String up = txt; up.toUpperCase();
+      baroScroll.setText(up.c_str(), 15, now);
+      baroScroll.draw(pc, 0, Y_L2, W, colDate(), now, true);
+    }
     void drawPage(Canvas& pc, uint8_t id, const struct tm& lt, bool timeValid, uint32_t now) {
       classicFont(pc);
       if (id == PAGE_INDOOR) { drawIndoorPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
+      if (id == PAGE_AIR) { drawAirPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
+      if (id == PAGE_BARO) { drawBaroPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading(), now); return; }
       const uint16_t cText = colText(), cTemp = Canvas::rgb(g_cfg.display.colors.temp), cDate = colDate();
       char l1[32], l2[32];
       if (id == PAGE_DATE) {
@@ -414,7 +451,7 @@ namespace renderer {
       demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
       demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
     }
-    constexpr uint8_t DEMO_COUNT = 24;
+    constexpr uint8_t DEMO_COUNT = 26;
     void buildDemoRadar();
     void demoApply(uint8_t i, uint32_t now) {
       demo.idx = i;
@@ -456,6 +493,15 @@ namespace renderer {
                  demo.indoor.t_temp = env_sensor::Trend::Rising; demo.indoor.t_hum = env_sensor::Trend::Falling; demo.indoor.t_press = env_sensor::Trend::FallingFast;
                  demo.indoor.d_temp = 0.8f; demo.indoor.d_hum = -4; demo.indoor.d_press = -3.4f; demo.indoor.span_min = 180; break;
         case 23: demo.name = "radar";      demo.wx = demoWeather(63, true, 58, 55, 91, 9, 14, 200); demo.screen = Screen::Radar; buildDemoRadar(); break;
+        case 24: demo.name = "air quality"; demo.page = PAGE_AIR; demo.indoorSet = true; demo.indoor = env_sensor::Reading();
+                 demo.indoor.valid = demo.indoor.has_humidity = demo.indoor.has_gas = demo.indoor.gas_valid = demo.indoor.air_ready = true;
+                 demo.indoor.temp_c = 23.4f; demo.indoor.humidity = 52; demo.indoor.pressure_hpa = 1013.0f; demo.indoor.sea_level_hpa = 1013.0f;
+                 demo.indoor.gas_kohm = 61.2f; demo.indoor.air_baseline_kohm = 148.0f; demo.indoor.air_score = 66; demo.indoor.air_level = env_sensor::AIR_FAIR;
+                 demo.indoor.t_air = env_sensor::Trend::FallingFast; demo.indoor.d_air = -27; demo.indoor.span_min = 60; break;
+        case 25: demo.name = "barometer";  demo.wx = demoWeather(3, true, 64, 62, 78, 16, 26, 190); demo.page = PAGE_BARO; demo.indoorSet = true; demo.indoor = env_sensor::Reading();
+                 demo.indoor.valid = demo.indoor.has_humidity = demo.indoor.sea_level_known = true;
+                 demo.indoor.temp_c = 21.0f; demo.indoor.humidity = 58; demo.indoor.pressure_hpa = 1004.6f; demo.indoor.sea_level_hpa = 1008.9f;
+                 demo.indoor.t_press = env_sensor::Trend::FallingFast; demo.indoor.d_press = -3.8f; demo.indoor.span_min = 180; break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
       // sounds that a real event would produce (alert chime, lightning chime, message chime, alarm beeps) plus the
@@ -463,7 +509,7 @@ namespace renderer {
       static const char* const SPOKEN[DEMO_COUNT] = {
         "sunny", "date", "rain", "snow", "thunderstorm", "lightning nearby", "wind", "high and low", "sunrise and sunset",
         "forecast", "hourly graph", "tornado warning", "winter storm watch", "alarm", "timer", "timer finished", "message",
-        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar" };
+        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor", "radar", "air quality", "barometer" };
       demo.lastRing = 0;
       if (demo.sound) {
         demo.soundPending = true;

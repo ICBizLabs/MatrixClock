@@ -5,7 +5,7 @@
 
 namespace {
   const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
-  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor" };
+  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor", "air", "baro" };
   const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp", "eas_attention", "eas_full", "nws_1050",
                                       "siren_wail", "siren_yelp", "siren_hilo", "alarm_beeps", "doorbell", "sos", "arpeggio", "sonar" };
   constexpr uint8_t CHIME_COUNT = (uint8_t)ChimeStyle::COUNT;
@@ -313,6 +313,7 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
       if (!getBool(sp, "lightning", a.speech.lightning, t, err)) return false;
       if (!getBool(sp, "alarms", a.speech.alarms, t, err)) return false;
       if (!getBool(sp, "demo", a.speech.demo, t, err)) return false;
+      if (!getBool(sp, "indoor", a.speech.indoor, t, err)) return false;
       if (!getNum(sp, "repeat", a.speech.repeat, t, err, 1, 3)) return false;
     }
     if (t) changed |= CHG_AUDIO;
@@ -346,6 +347,7 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (!getSeverity(o, "notify_min_severity", pb.notify_min_severity, t, err)) return false;
     if (!getBool(o, "notify_lightning", pb.notify_lightning, t, err)) return false;
     if (!getBool(o, "notify_alarms", pb.notify_alarms, t, err)) return false;
+    if (!getBool(o, "notify_air", pb.notify_air, t, err)) return false;
     if (!getBool(o, "show_pushes", pb.show_pushes, t, err)) return false;
     if (!getNum(o, "poll_sec", pb.poll_sec, t, err, 15, 3600)) return false;
     if (!getNum(o, "show_sec", pb.show_sec, t, err, 0, 3600)) return false;
@@ -384,6 +386,12 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     }
     if (!getNum(o, "trend_min", in.trend_min, t, err, 10, 1440)) return false;
     if (!getNum(o, "pressure_trend_min", in.pressure_trend_min, t, err, 30, 1440)) return false;
+    if (!getBool(o, "gas", in.gas, t, err)) return false;
+    if (!getNum(o, "air_fair_below", in.air_fair_below, t, err, 1, 100)) return false;
+    if (!getNum(o, "air_poor_below", in.air_poor_below, t, err, 1, 100)) return false;
+    if (in.air_poor_below >= in.air_fair_below) { err = "indoor.air_poor_below must be below air_fair_below"; return false; }
+    if (!getBool(o, "air_alert", in.air_alert, t, err)) return false;
+    if (!getNum(o, "air_alert_min", in.air_alert_min, t, err, 5, 1440)) return false;
     if (t) changed |= CHG_INDOOR;
   }
   c.indoor.temp_offset_c = c.weather.imperial ? c.indoor.temp_offset * 5.0f / 9.0f : c.indoor.temp_offset;
@@ -559,6 +567,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   sp["lightning"] = a.speech.lightning;
   sp["alarms"] = a.speech.alarms;
   sp["demo"] = a.speech.demo;
+  sp["indoor"] = a.speech.indoor;
   sp["repeat"] = a.speech.repeat;
 
   o = dst["lightning"].to<JsonObject>();
@@ -577,6 +586,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["notify_min_severity"] = severity_name(c.pushbullet.notify_min_severity);
   o["notify_lightning"] = c.pushbullet.notify_lightning;
   o["notify_alarms"] = c.pushbullet.notify_alarms;
+  o["notify_air"] = c.pushbullet.notify_air;
   o["show_pushes"] = c.pushbullet.show_pushes;
   o["poll_sec"] = c.pushbullet.poll_sec;
   o["show_sec"] = c.pushbullet.show_sec;
@@ -599,6 +609,11 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["pressure_unit"] = c.indoor.pressure_unit == 1 ? "hpa" : c.indoor.pressure_unit == 2 ? "inhg" : "auto";
   o["trend_min"] = c.indoor.trend_min;
   o["pressure_trend_min"] = c.indoor.pressure_trend_min;
+  o["gas"] = c.indoor.gas;
+  o["air_fair_below"] = c.indoor.air_fair_below;
+  o["air_poor_below"] = c.indoor.air_poor_below;
+  o["air_alert"] = c.indoor.air_alert;
+  o["air_alert_min"] = c.indoor.air_alert_min;
 
   o = dst["radar"].to<JsonObject>();
   o["enabled"] = c.radar.enabled;

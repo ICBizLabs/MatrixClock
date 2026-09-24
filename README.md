@@ -47,6 +47,8 @@ arrives, and is configured entirely through its own web interface.
   page cycles while rain or snow is nearby.
 - **Indoor sensor**: plug a BME280, BMP280 or BME680 into the I2C header and the clock shows indoor temperature,
   humidity and barometric pressure with rising / falling arrows, keeps 24 hours of history and charts it in the web UI.
+  A BME680 adds a relative **air-quality** score with a "ventilate" alert; every sensor adds dew point, condensation
+  and mould risk, and a **Zambretti barometer forecast** page.
 - **Live view** of the panel in the web UI, settings backup and restore.
 - **Buttons**: the board's thumb-wheel switch changes pages, acknowledges alerts, stops or snoozes alarms, refreshes data.
 
@@ -190,6 +192,8 @@ timer, message, holiday themes, night mode, test pattern and update. Individual 
 | IP after connecting | Setup access point | Splash |
 | <img src="docs/screens/gif/test.gif" width="256" alt="Test pattern"> | <img src="docs/screens/gif/radar.gif" width="256" alt="Radar loop with coastline (real data)"> | <img src="docs/screens/gif/indoor.gif" width="256" alt="Indoor sensor page with trend arrows"> |
 | Test pattern | Radar loop: coastline, water tint, home cross (real data, dry day) | Indoor page: temperature, humidity, pressure with trend arrows |
+| <img src="docs/screens/gif/air.gif" width="256" alt="Air quality page (BME680)"> | <img src="docs/screens/gif/baro.gif" width="256" alt="Barometer page with Zambretti forecast"> |
+| Air quality page: score, trend, good / fair / poor (BME680) | Barometer page: pressure, tendency and the Zambretti forecast |
 
 ### Weather alert screens
 
@@ -279,8 +283,8 @@ IP address once online). After every WiFi connection the IP address is shown for
 
 The Status tab has a demo switch that cycles the panel through sample scenarios eight seconds each: sunny, rain, snow,
 thunderstorm, lightning, wind, high/low, sun times, the forecast and hourly screens, a tornado warning and a winter
-storm watch, an alarm, a running and a finished timer, a message, the holiday themes, night mode, the indoor sensor
-page and a radar loop with a synthetic storm. It uses made-up
+storm watch, an alarm, a running and a finished timer, a message, the holiday themes, night mode, the indoor sensor,
+air-quality and barometer pages and a radar loop with a synthetic storm. It uses made-up
 data, turns itself off after the chosen number of minutes, and the wheel push ends it early. It is silent unless
 "with sounds" is ticked, in which case the alert, lightning, alarm, timer and message scenarios play their chimes even
 during quiet hours. Scripts can use `POST /api/demo?on=1&minutes=10&sound=1`.
@@ -353,6 +357,25 @@ temperature, humidity and pressure) and shows the values on the Status tab with 
 few inches away from the panel and the controller, which run warm, or dial the offset in on the Location & Weather tab.
 
 <img src="docs/screens/gif/indoor.gif" width="384" alt="Indoor page: house icon, temperature, humidity and pressure with trend arrows">
+
+**BME680 air quality.** With a BME680 the gas sensor runs too (its heater warms the chip by about a degree, which
+the temperature offset absorbs). The clock learns a clean-air baseline for the gas resistance, keeps it across reboots,
+and turns each reading into a 0 to 100 score: 75 % from the resistance against the baseline, 25 % from how close the
+humidity is to 40 %. Good, fair and poor thresholds are yours to set; the **air** page shows the score with a trend
+arrow and the category in green, yellow or red, the Status tab shows the raw resistance and charts the score. When the
+air stays poor for two minutes the clock chimes, says "Air quality poor" and can push to your phone, at most once an
+hour by default. The score is relative, not a ppm figure: it tells you when to open a window, not what is in the air.
+It needs about five minutes after power-up and gets better over the first day as the baseline settles.
+
+**Comfort values.** From temperature and humidity the Status tab also shows the dew point, absolute humidity, an
+indoor heat index when it applies, a **condensation** warning when the outdoor temperature from Open-Meteo drops to the
+indoor dew point (windows will fog or run), and a **mould risk** flag when humidity has sat above 60 % for six hours or
+above 70 % for two.
+
+**Barometer forecast.** The **baro** page shows the pressure with its arrow and a scrolling local forecast from the
+classic Zambretti method, which turns sea-level pressure, its three-hour tendency and the wind direction into one of
+32 short texts such as "Fine, becoming less settled" or "Rain at times, worse later". It is what the dial on an old
+brass barometer did, and on a coast it is right surprisingly often. It appears after 30 minutes of pressure history.
 
 Each value carries a **trend arrow**: temperature and humidity are compared with the reading one hour ago (0.5 °C or
 3 % RH to count as a change), pressure with three hours ago as weather services do (1 hPa; while the history is still

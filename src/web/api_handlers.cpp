@@ -17,6 +17,7 @@
 #include "audio/voice.h"
 #include "net/voice_pack.h"
 #include "net/radar.h"
+#include "util/zambretti.h"
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
 #include "io/env_sensor.h"
@@ -207,6 +208,33 @@ namespace web {
           in["d_pressure_hpa"] = serialized(String(er.d_press, 2));
           in["span_min"] = er.span_min;
           in["age_s"] = (millis() - er.sample_ms) / 1000;
+          in["has_gas"] = er.has_gas;
+          if (er.has_gas) {
+            in["gas_valid"] = er.gas_valid;
+            in["gas_kohm"] = serialized(String(er.gas_kohm, 1));
+            in["air_ready"] = er.air_ready;
+            in["air_score"] = serialized(String(er.air_score, 0));
+            in["air_level"] = env_sensor::airLevelName(er.air_level);
+            in["air_baseline_kohm"] = serialized(String(er.air_baseline_kohm, 1));
+            in["trend_air"] = env_sensor::trendName(er.t_air);
+            in["d_air"] = serialized(String(er.d_air, 0));
+          }
+          if (er.has_humidity) {
+            in["dew_point_c"] = serialized(String(er.dew_point_c, 1));
+            in["abs_humidity"] = serialized(String(er.abs_humidity, 1));
+            in["heat_index_c"] = serialized(String(er.heat_index_c, 1));
+            in["condensation"] = env_sensor::condensationName(er.condensation);
+            in["mould_risk"] = env_sensor::mouldName(er.mould_risk);
+          }
+          {
+            WeatherData w;
+            int wd = (shared::getWeather(w) && w.valid) ? w.cur.wind_dir : -1;
+            zambretti::Result z = zambretti::forecast(er.sea_level_known ? er.sea_level_hpa : er.pressure_hpa, er.d_press, wd);
+            JsonObject zo = in["forecast"].to<JsonObject>();
+            zo["text"] = er.span_min >= 30 ? z.text : "";
+            zo["z"] = er.span_min >= 30 ? z.z : 0;
+            zo["trend"] = z.trend;
+          }
         }
         in["errors"] = env_sensor::errors();
       }
@@ -462,12 +490,16 @@ namespace web {
       JsonObject root = res->getRoot();
       root["sensor"] = env_sensor::typeName();
       root["step_min"] = step;
+      root["has_gas"] = env_sensor::hasGas();
       JsonArray age = root["age_min"].to<JsonArray>(), t = root["temp_c"].to<JsonArray>(), h = root["humidity"].to<JsonArray>(), pr = root["pressure_hpa"].to<JsonArray>();
+      JsonArray gk = root["gas_kohm"].to<JsonArray>(), air = root["air_score"].to<JsonArray>();
       for (size_t i = 0; i < n; i++) {
         age.add(pts[i].age_min);
         t.add(serialized(String(pts[i].temp_c, 2)));
         h.add(serialized(String(pts[i].humidity, 1)));
         pr.add(serialized(String(pts[i].pressure_hpa, 2)));
+        gk.add(serialized(String(pts[i].gas_kohm, 1)));
+        air.add(serialized(String(pts[i].air_score, 0)));
       }
       res->setLength();
       r->send(res);

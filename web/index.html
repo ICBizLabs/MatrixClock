@@ -55,7 +55,7 @@ progress{width:100%;height:10px}
  <div class="card"><h2>Now</h2><table id="st-now"></table></div>
  <div class="card" id="indoor-card" hidden><h2>Indoor</h2><table id="st-indoor"></table>
   <canvas id="inchart" width="900" height="220" style="width:100%;max-width:900px;background:#0b0e14;border-radius:6px;margin-top:8px"></canvas>
-  <p class="msg" id="inchart-note">Last 3 hours, one point per minute. Arrows compare with the reading one hour ago (temperature, humidity) and three hours ago (pressure, scaled while the history is shorter).</p></div>
+  <p class="msg" id="inchart-note">Last 3 hours, one point per minute. Arrows compare with the reading one hour ago (temperature, humidity, air) and three hours ago (pressure, scaled while the history is shorter).</p></div>
  <div class="card"><h2>Demo mode</h2><div class="row"><label class="chk"><input type="checkbox" id="demo" onchange="setDemo(this.checked)">Cycle through demo screens</label>
   for <input id="demomin" type="number" min="1" max="720" value="10" style="width:80px"> minutes
   <label class="chk"><input type="checkbox" id="demosound" onchange="if($('#demo').checked)setDemo(true)">with sounds</label><span class="msg" id="msg-demo"></span></div>
@@ -131,8 +131,13 @@ progress{width:100%;height:10px}
   <label>Temperature / humidity trend window (minutes)<input data-k="indoor.trend_min" type="number" min="10" max="1440"></label>
   <label>Pressure trend window (minutes)<input data-k="indoor.pressure_trend_min" type="number" min="30" max="1440"></label>
   <label>Read every (seconds)<input data-k="indoor.sample_sec" type="number" min="2" max="600"></label>
+  <label class="chk"><input data-k="indoor.gas" type="checkbox">BME680: run the gas sensor (air quality; warms the chip about 1°)</label>
+  <label>Air quality "good" at or above (%)<input data-k="indoor.air_fair_below" type="number" min="1" max="100"></label>
+  <label>Air quality "poor" below (%)<input data-k="indoor.air_poor_below" type="number" min="1" max="100"></label>
+  <label class="chk"><input data-k="indoor.air_alert" type="checkbox">Chime / speak / push when the air stays poor for two minutes</label>
+  <label>At most one air alert every (minutes)<input data-k="indoor.air_alert_min" type="number" min="5" max="1440"></label>
  </div><div class="row"><button class="btn" onclick="save('weather')">Save</button><span class="msg" id="msg-indoor"></span></div>
- <p class="msg">Wire 3.3 V, GND, SDA (GPIO 1) and SCL (GPIO 2). Keep the sensor a few inches from the panel and the controller, or set a temperature offset. Trend arrows: up / down when the change over the window exceeds 0.5 °C, 3 % or 1 hPa; a double arrow means three times that.</p></div>
+ <p class="msg">Wire 3.3 V, GND, SDA (GPIO 1) and SCL (GPIO 2). Keep the sensor a few inches from the panel and the controller, or set a temperature offset. Trend arrows: up / down when the change over the window exceeds 0.5 °C, 3 % or 1 hPa; a double arrow means three times that. The air-quality score is relative: 75 % from the gas resistance against a clean-air baseline the clock learns (kept across reboots), 25 % from how close humidity is to 40 %. It needs about five minutes after power-up and improves over the first day.</p></div>
 </section>
 
 <section id="display">
@@ -153,7 +158,7 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="display.night_mode.hide_bottom" type="checkbox">Hide weather at night</label>
  </div></div>
  <div class="card"><h2>Pages</h2><div class="grid">
-  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun, indoor)<input data-k="display.pages" data-list="1"></label>
+  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun, indoor, air, baro)<input data-k="display.pages" data-list="1"></label>
   <label>Seconds per page<input data-k="display.page_sec" type="number" min="2" max="60"></label>
   <label class="chk"><input data-k="display.forecast_page" type="checkbox">Show 3-day forecast screen</label>
   <label>Forecast every N page cycles<input data-k="display.forecast_every_n_cycles" type="number" min="1" max="20"></label>
@@ -257,6 +262,7 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="audio.speech.lightning" type="checkbox">"Lightning nearby"</label>
   <label class="chk"><input data-k="audio.speech.alarms" type="checkbox">"Alarm" and "Timer finished" when the ring starts</label>
   <label class="chk"><input data-k="audio.speech.demo" type="checkbox">Scenario names in demo mode (with demo sounds)</label>
+  <label class="chk"><input data-k="audio.speech.indoor" type="checkbox">"Air quality poor" (BME680)</label>
   <label>Say each announcement this many times<input data-k="audio.speech.repeat" type="number" min="1" max="3"></label>
  </div><div class="row"><button class="btn" onclick="save('audio')">Save</button>
   <button class="btn sec" id="voicedl" onclick="post('/api/voice/download')">Download voice pack</button>
@@ -272,6 +278,7 @@ progress{width:100%;height:10px}
   <label>Only alerts of at least<select data-k="pushbullet.notify_min_severity"><option>Unknown</option><option>Minor</option><option>Moderate</option><option>Severe</option><option>Extreme</option></select></label>
   <label class="chk"><input data-k="pushbullet.notify_lightning" type="checkbox">Push nearby lightning</label>
   <label class="chk"><input data-k="pushbullet.notify_alarms" type="checkbox">Push alarms and finished timers</label>
+  <label class="chk"><input data-k="pushbullet.notify_air" type="checkbox">Push poor indoor air quality (BME680)</label>
   <label class="chk"><input data-k="pushbullet.show_pushes" type="checkbox">Show pushes sent to me on the clock</label>
   <label>Check for pushes every (seconds)<input data-k="pushbullet.poll_sec" type="number" min="15" max="3600"></label>
   <label>Show a push for (seconds, 0 = until cleared)<input data-k="pushbullet.show_sec" type="number" min="0" max="3600"></label>
@@ -381,11 +388,18 @@ function indoorStatus(I){const card=$('#indoor-card');if(!card)return;const show
  const sl=cfg&&cfg.indoor&&cfg.indoor.sea_level&&I.sea_level_known;const hpa=sl?I.sea_level_hpa:I.pressure_hpa;const pv=inhg?(hpa*0.02953).toFixed(2)+' inHg':hpa+' hPa';
  const dP=inhg?(I.d_pressure_hpa*0.02953).toFixed(2)+' inHg':I.d_pressure_hpa+' hPa';
  row(t,'Pressure',pv+(sl?' <small>(sea level, altitude '+I.altitude_m+' m)</small>':' <small>(station)</small>')+' '+ARROW[I.trend_pressure]+' <small>'+I.trend_pressure+(I.span_min?' ('+(I.d_pressure_hpa>0?'+':'')+dP+' per '+(cfg?cfg.indoor.pressure_trend_min:180)+' min)':'')+'</small>');
+ if(I.has_gas){row(t,'Air quality',I.air_ready?I.air_score+'% '+ARROW[I.trend_air||'steady']+' <b>'+I.air_level+'</b> <small>('+I.gas_kohm+' kΩ, clean-air baseline '+I.air_baseline_kohm+' kΩ)</small>':'<span class="warn">warming up, '+(I.gas_valid?'baseline learning':'no valid gas reading yet')+'</span>'+(I.gas_kohm?' <small>'+I.gas_kohm+' kΩ</small>':''));}
+ if(I.has_humidity){const dp=u?I.dew_point_c*9/5+32:I.dew_point_c;const hi=u?I.heat_index_c*9/5+32:I.heat_index_c;
+  row(t,'Dew point',dp.toFixed(1)+'°'+(u?'F':'C')+' <small>· '+I.abs_humidity+' g/m³ absolute'+(Math.abs(I.heat_index_c-I.temp_c)>0.3?' · feels like '+hi.toFixed(1)+'°':'')+'</small>');
+  row(t,'Condensation on windows',I.condensation==='likely'?'<span class="bad">likely (outside colder than the indoor dew point)</span>':I.condensation==='possible'?'<span class="warn">possible</span>':'unlikely');
+  row(t,'Mould risk',I.mould_risk==='high'?'<span class="bad">high: above 70% humidity for 2 h</span>':I.mould_risk==='elevated'?'<span class="warn">elevated: above 60% humidity for 6 h</span>':'none');}
+ if(I.forecast)row(t,'Barometer forecast',I.forecast.text?I.forecast.text+' <small>(Zambretti, pressure '+(I.forecast.trend>0?'rising':I.forecast.trend<0?'falling':'steady')+')</small>':'<span class="warn">needs 30 min of pressure history</span>');
  row(t,'Sampled',I.age_s+' s ago, '+I.span_min+' min of history');
  if(Date.now()-inchartAt>60000){inchartAt=Date.now();drawIndoorChart(u,inhg);}}
 async function drawIndoorChart(u,inhg){try{const r=await fetch('/api/indoor/history?minutes=180');const j=await r.json();const cv=$('#inchart');const g=cv.getContext('2d');const W=cv.width,H=cv.height;g.fillStyle='#0b0e14';g.fillRect(0,0,W,H);
  const n=j.age_min.length;if(n<2){g.fillStyle='#8a94a6';g.font='16px system-ui';g.fillText('history builds up one point per minute',16,H/2);return;}
  const series=[{v:j.temp_c.map(x=>u?x*9/5+32:x),c:'#ffd060',l:'temp °'+(u?'F':'C'),d:1},{v:j.humidity,c:'#60a0ff',l:'humidity %',d:0},{v:j.pressure_hpa.map(x=>inhg?x*0.02953:x),c:'#7ae582',l:'pressure '+(inhg?'inHg':'hPa'),d:inhg?2:1}];
+ if(j.has_gas&&j.air_score&&j.air_score.some(x=>x>0))series.push({v:j.air_score,c:'#e08cff',l:'air %',d:0});
  const L=64,R=16,T=18,B=22,cw=W-L-R,ch=H-T-B;g.strokeStyle='#1e2430';g.lineWidth=1;for(let i=0;i<=4;i++){const y=T+ch*i/4;g.beginPath();g.moveTo(L,y);g.lineTo(W-R,y);g.stroke();}
  let lx=L+8;series.forEach((s,k)=>{let lo=Math.min(...s.v),hi=Math.max(...s.v);const span=k==2?(inhg?0.06:2):2;if(hi-lo<span)hi=lo+span;const pad=(hi-lo)*0.1;lo-=pad;hi+=pad;
   g.strokeStyle=s.c;g.lineWidth=2;g.beginPath();s.v.forEach((v,i)=>{const x=L+cw*i/(n-1),y=T+ch*(1-(v-lo)/(hi-lo));i?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();

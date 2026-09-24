@@ -7,7 +7,7 @@ enum class Severity : uint8_t { Unknown = 0, Minor, Moderate, Severe, Extreme };
 const char* severity_name(Severity s);
 bool        severity_parse(const char* s, Severity& out);
 
-enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_COUNT };
+enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_AIR, PAGE_BARO, PAGE_COUNT };
 const char* page_name(uint8_t id);
 bool        page_parse(const char* s, uint8_t& out);
 
@@ -132,6 +132,7 @@ struct SpeechConfig {         // spoken announcements from the downloaded voice 
   bool lightning = true;        // "Lightning nearby"
   bool alarms = true;           // "Alarm" / "Timer finished" once when the ring starts
   bool demo = true;             // scenario names in demo mode (with demo sounds)
+  bool indoor = true;           // "Air quality poor"
   uint8_t repeat = 1;           // say each announcement 1..3 times
 };
 struct AudioConfig {
@@ -170,6 +171,7 @@ struct PushbulletConfig {         // phone notifications out, pushes in (https:/
   Severity notify_min_severity = Severity::Severe;
   bool notify_lightning = true;
   bool notify_alarms = false;
+  bool notify_air = true;         // poor indoor air quality (BME680)
   bool show_pushes = true;        // pushes sent to the account (or to this device) scroll on the panel
   uint16_t poll_sec = 60;
   uint16_t show_sec = 60;
@@ -194,6 +196,11 @@ struct IndoorConfig {             // BME280 / BMP280 / BME680 on the I2C header 
   uint8_t pressure_unit = 0;      // 0 = auto (inHg when imperial, else hPa), 1 = hPa, 2 = inHg
   uint16_t trend_min = 60;        // window for the temperature / humidity trend arrows
   uint16_t pressure_trend_min = 180;   // window for the pressure tendency (WMO uses 3 hours)
+  bool gas = true;                // BME680: run the gas sensor heater (adds about 1 C of self-heating)
+  uint8_t air_fair_below = 80;    // air-quality score thresholds: good >= fair_below, fair >= poor_below, else poor
+  uint8_t air_poor_below = 60;
+  bool air_alert = true;          // chime / speech / push when the air stays poor
+  uint16_t air_alert_min = 60;    // at most one air alert this often
   float temp_offset_c = 0;        // derived: temp_offset converted to C
 };
 

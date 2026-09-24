@@ -7,7 +7,7 @@
 // Spoken announcements: looks phrases up in the voice pack (/voice.pack in LittleFS, built by tools/make_voice_pack.py
 // and downloaded by net/voice_pack.cpp) and plays them through audio_out after the chime.
 namespace voice {
-  enum class Kind : uint8_t { Alert, Lightning, Alarm, Demo, Test };
+  enum class Kind : uint8_t { Alert, Lightning, Alarm, Demo, Indoor, Test };
   struct PackInfo {
     bool installed = false;
     uint32_t version = 0;

@@ -150,6 +150,7 @@ namespace voice {
       case Kind::Lightning: want = want && cfg.speech.lightning; break;
       case Kind::Alarm: want = want && cfg.speech.alarms; break;
       case Kind::Demo: want = want && cfg.speech.demo; break;
+      case Kind::Indoor: want = want && cfg.speech.indoor; break;
       default: break;
     }
     audio_out::ClipRef c;

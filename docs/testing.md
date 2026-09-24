@@ -42,6 +42,10 @@ pio device monitor           # serial log at 115200
    `curl -s http://matrixclock.local/api/status | jq .indoor` has `valid: true` within 10 s, the `indoor` page appears in
    the rotation, and after 10 minutes the arrows start (breathe on the sensor: humidity rises, arrow up). The Status
    tab's Indoor card charts `/api/indoor/history`.
+   With a BME680 the log says `gas sensor on`; after five minutes `/api/status | jq .indoor.air_score` shows a score
+   and the `air` page appears; breathing on the sensor or opening a marker pen drops the score and, after two minutes
+   below the poor threshold, triggers the chime, "Air quality poor" and a push. The `baro` page scrolls the Zambretti
+   text once 30 minutes of pressure history exist.
 7. **RTC / buttons / OTA** – power-cycle with WiFi unavailable: the time is right immediately and
    `/api/status` `time.source` is `rtc`. K1 short = next page, K1 long = test pattern, K2 short = acknowledge alerts,
    K2 long = test chime, K3 short = refresh data, K3 long = reboot.
