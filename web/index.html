@@ -2,8 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Matrix Weather Clock</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#111418">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Matrix Clock">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
 :root{--bg:#111418;--card:#1b2027;--line:#2b323c;--fg:#e6e9ee;--mut:#8b95a3;--acc:#3fa9f5;--ok:#3dbb6a;--warn:#f0a030;--bad:#e5484d}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
@@ -21,6 +28,8 @@ input,select{background:#0d1014;color:var(--fg);border:1px solid var(--line);bor
 input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc)}label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
 .btn{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}
 .btn.sec{background:#2b323c}.btn.bad{background:var(--bad);color:#fff}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.a2hs{display:none;margin:12px 16px 0;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:14px;gap:10px;align-items:center}
+.a2hs.on{display:flex}.a2hs img{width:40px;height:40px;border-radius:9px;flex:none}.a2hs span{flex:1}.a2hs button{flex:none}
 .msg{font-size:13px;color:var(--mut);min-height:1.2em}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
 table{width:100%;border-collapse:collapse;font-size:14px}td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}td:first-child{color:var(--mut);width:38%}
 .al{border-left:4px solid var(--warn);padding:6px 10px;margin:6px 0;background:#0d1014;border-radius:4px}
@@ -29,7 +38,8 @@ progress{width:100%;height:10px}
 </style>
 </head>
 <body>
-<header><h1>Matrix Weather Clock</h1><span id="hdr">connecting…</span></header>
+<header><h1>Matrix Weather Clock</h1><span id="hdr">connecting…</span><a href="/setup" style="margin-left:auto;font-size:13px;color:var(--acc)">Setup wizard</a></header>
+<div class="a2hs" id="a2hs"><img src="/icon-192.png" alt=""><span id="a2hs-text">Add this page to your home screen to use it like an app.</span><button class="btn" id="a2hs-btn" hidden>Install</button><button class="btn sec" onclick="a2hsDismiss()">Not now</button></div>
 <nav>
 <button data-tab="status" class="on">Status</button><button data-tab="weather">Location &amp; Weather</button>
 <button data-tab="display">Display</button><button data-tab="alarms">Alarms</button><button data-tab="panel">Panel</button><button data-tab="audio">Audio</button>
@@ -341,6 +351,14 @@ async function scan(){say('wifi','scanning…');await fetch('/api/wifi/scan?star
 function ota(){const f=$('#fw').files[0];if(!f)return say('update','choose a firmware file first','bad');const x=new XMLHttpRequest();const p=$('#otap');p.hidden=false;
  x.upload.onprogress=e=>{if(e.lengthComputable)p.value=Math.round(e.loaded*100/e.total)};x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}if(x.status===200&&j.ok){say('update','uploaded, rebooting… reload this page in ~15 s','ok');}else say('update','failed: '+(j.error||x.status),'bad');};
  x.onerror=()=>say('update','upload error','bad');const fd=new FormData();fd.append('firmware',f,f.name);x.open('POST','/update');x.send(fd);say('update','uploading…');}
+// "Add to home screen" hint on phones and tablets (browsers only offer their own install prompt on HTTPS)
+let installEvt=null;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEvt=e;if(/iPhone|iPad|iPod/i.test(navigator.userAgent))return;const b=$('#a2hs-btn');b.hidden=false;b.onclick=()=>{installEvt.prompt();installEvt=null;a2hsDismiss();};});
+function a2hsDismiss(){$('#a2hs').classList.remove('on');try{localStorage.setItem('a2hs','no');}catch(e){}}
+(function(){try{if(localStorage.getItem('a2hs')==='no')return;}catch(e){}
+ const standalone=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;const mobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&matchMedia('(max-width: 900px)').matches);
+ if(standalone||!mobile)return;const ios=/iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ $('#a2hs-text').innerHTML=ios?'Use this page like an app: tap <b>Share</b> (the box with an arrow) and choose <b>Add to Home Screen</b>.':'Use this page like an app: open the browser menu (⋮) and choose <b>Add to Home screen</b>.';$('#a2hs').classList.add('on');})();
+if('serviceWorker' in navigator&&window.isSecureContext)navigator.serviceWorker.register('/sw.js').catch(()=>{});
 loadConfig().then(fillAlarms).catch(e=>say('wifi','config load failed: '+e,'bad'));status();setInterval(status,5000);preview();setInterval(preview,400);
 </script>
 </body>

@@ -5,6 +5,8 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/` | Web UI (gzip, ETag) |
+| GET | `/setup` | mobile setup wizard (WiFi, location, time zone, alert contact) |
+| GET | `/manifest.webmanifest`, `/sw.js`, `/icon-192.png`, `/icon-512.png`, `/apple-touch-icon.png` | web-app manifest, service worker and icons for "Add to Home Screen" |
 | GET | `/api/status` | time, weather summary, active alerts, WiFi, network fetch status, memory, panel, audio, I2C map |
 | GET | `/api/config` | full configuration (passwords masked as `***`) plus `tz_options` |
 | POST | `/api/config` | partial configuration merge; body is any subset of the config object. Returns `{ok, applied[], reboot_required[]}` or `{ok:false, error}` with HTTP 400 |

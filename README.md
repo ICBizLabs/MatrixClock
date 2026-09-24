@@ -195,6 +195,23 @@ below); the clock stays visible throughout.
 
 *Four frames, half a second apart: the banner scrolls left while the frame flashes.*
 
+## Setup wizard and phone use
+
+Phones and tablets get a simpler path. The setup access point opens the **setup wizard** at http://4.3.2.1/setup:
+four short screens for WiFi (with a network list), location (city/ZIP search or coordinates), time zone and units,
+and the NWS alert contact, saved in one go. It is also reachable any time from the "Setup wizard" link in the header
+of the full page, or at http://matrixclock.local/setup.
+
+The pages carry a web-app manifest, icons and the iOS meta tags, so "Add to Home Screen" gives you an icon that opens
+the clock's page full screen like an app. On a phone the page shows a one-time hint with the two taps needed (Share →
+Add to Home Screen on iPhone/iPad, browser menu → Add to Home screen on Android). Browsers only offer their own
+install prompt over HTTPS, which the clock's plain-HTTP LAN page cannot provide; the hint covers that gap.
+
+| | |
+|---|---|
+| <img src="docs/ui/setup-wizard.png" width="300" alt="Setup wizard on a phone"> | <img src="docs/ui/mobile-status.png" width="300" alt="Status page on a phone with the add-to-home-screen hint"> |
+| Setup wizard on a phone | Full page on a phone with the home-screen hint |
+
 ## Web interface
 
 Everything is configured from the clock's own page at http://matrixclock.local/. The Status tab shows a live view of

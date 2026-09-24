@@ -12,16 +12,24 @@ namespace web {
     AsyncWebServer server(80);
     size_t otaReceived = 0;
 
-    void sendIndex(AsyncWebServerRequest* r) {
-      if (r->hasHeader("If-None-Match") && r->header("If-None-Match") == WEB_INDEX_ETAG) { r->send(304); return; }
-      AsyncWebServerResponse* res = r->beginResponse(200, "text/html", WEB_INDEX_GZ, WEB_INDEX_GZ_LEN);
+    void sendGz(AsyncWebServerRequest* r, const uint8_t* data, size_t len, const char* etag) {
+      if (r->hasHeader("If-None-Match") && r->header("If-None-Match") == etag) { r->send(304); return; }
+      AsyncWebServerResponse* res = r->beginResponse(200, "text/html", data, len);
       res->addHeader("Content-Encoding", "gzip");
-      res->addHeader("ETag", WEB_INDEX_ETAG);
+      res->addHeader("ETag", etag);
       res->addHeader("Cache-Control", "no-cache");
       r->send(res);
     }
+    void sendIndex(AsyncWebServerRequest* r) { sendGz(r, WEB_INDEX_GZ, WEB_INDEX_GZ_LEN, WEB_INDEX_ETAG); }
+    void sendSetup(AsyncWebServerRequest* r) { sendGz(r, WEB_SETUP_GZ, WEB_SETUP_GZ_LEN, WEB_SETUP_ETAG); }
+    void sendStatic(AsyncWebServerRequest* r, const char* type, const uint8_t* data, size_t len) {
+      AsyncWebServerResponse* res = r->beginResponse(200, type, data, len);
+      res->addHeader("Cache-Control", "max-age=86400");
+      r->send(res);
+    }
 
-    void captiveRedirect(AsyncWebServerRequest* r) { r->redirect("http://4.3.2.1/"); }
+    // the setup access point sends phones and laptops to the wizard
+    void captiveRedirect(AsyncWebServerRequest* r) { r->redirect("http://4.3.2.1/setup"); }
 
     void otaRequest(AsyncWebServerRequest* r) {
       bool ok = !Update.hasError() && Update.isFinished();
@@ -67,6 +75,12 @@ namespace web {
       sendIndex(r);
     });
     server.on("/index.html", HTTP_GET, sendIndex);
+    server.on("/setup", HTTP_GET, sendSetup);
+    server.on("/manifest.webmanifest", HTTP_GET, [](AsyncWebServerRequest* r) { sendStatic(r, "application/manifest+json", (const uint8_t*)WEB_MANIFEST, strlen_P(WEB_MANIFEST)); });
+    server.on("/sw.js", HTTP_GET, [](AsyncWebServerRequest* r) { sendStatic(r, "text/javascript", (const uint8_t*)WEB_SW_JS, strlen_P(WEB_SW_JS)); });
+    server.on("/icon-192.png", HTTP_GET, [](AsyncWebServerRequest* r) { sendStatic(r, "image/png", WEB_ICON_192, WEB_ICON_192_LEN); });
+    server.on("/icon-512.png", HTTP_GET, [](AsyncWebServerRequest* r) { sendStatic(r, "image/png", WEB_ICON_512, WEB_ICON_512_LEN); });
+    server.on("/apple-touch-icon.png", HTTP_GET, [](AsyncWebServerRequest* r) { sendStatic(r, "image/png", WEB_ICON_192, WEB_ICON_192_LEN); });
     // captive portal probes used by phones and desktops
     for (const char* p : { "/generate_204", "/gen_204", "/hotspot-detect.html", "/connecttest.txt", "/ncsi.txt", "/fwlink",
                            "/redirect", "/canonical.html", "/success.txt", "/library/test/success.html" }) {
