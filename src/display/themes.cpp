@@ -1,0 +1,40 @@
+#include "themes.h"
+
+namespace themes {
+  namespace {
+    const Theme NEW_YEAR   = { "New Year",       0xFFD700, 0xFFFFFF, 0xC0C0FF, Deco::Confetti };
+    const Theme VALENTINE  = { "Valentine's",    0xFF4070, 0xFF90B0, 0xFFC0D0, Deco::Hearts };
+    const Theme ST_PATRICK = { "St. Patrick's",  0x30E060, 0xFFD700, 0x80FF80, Deco::Sparkle };
+    const Theme EASTER     = { "Easter",         0xC0A0FF, 0xFFE080, 0xA0FFC0, Deco::Sparkle };
+    const Theme JULY4      = { "Independence",   0xFFFFFF, 0xFF3030, 0x4060FF, Deco::Confetti };
+    const Theme HALLOWEEN  = { "Halloween",      0xFF7000, 0xA040FF, 0xFFB050, Deco::Sparkle };
+    const Theme THANKS     = { "Thanksgiving",   0xFFA030, 0xC06020, 0xFFD080, Deco::None };
+    const Theme CHRISTMAS  = { "Christmas",      0xFF3030, 0x30D040, 0xFFFFFF, Deco::Snow };
+    const Theme NYE        = { "New Year's Eve", 0xFFD700, 0xFFFFFF, 0xC0C0FF, Deco::Confetti };
+
+    // Anonymous Gregorian algorithm (Meeus/Jones/Butcher): month (1-12) and day of Easter Sunday
+    void easter(int year, int& month, int& day) {
+      int a = year % 19, b = year / 100, c = year % 100, d = b / 4, e = b % 4, f = (b + 8) / 25, g = (b - f + 1) / 3;
+      int h = (19 * a + b - d - g + 15) % 30, i = c / 4, k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+      int m = (a + 11 * h + 22 * l) / 451;
+      month = (h + l - 7 * m + 114) / 31;
+      day = ((h + l - 7 * m + 114) % 31) + 1;
+    }
+  }
+
+  const Theme* forDate(const struct tm& lt) {
+    const int mon = lt.tm_mon + 1, day = lt.tm_mday, year = lt.tm_year + 1900;
+    if (mon == 1 && day == 1) return &NEW_YEAR;
+    if (mon == 2 && day == 14) return &VALENTINE;
+    if (mon == 3 && day == 17) return &ST_PATRICK;
+    if (mon == 7 && day == 4) return &JULY4;
+    if (mon == 10 && day == 31) return &HALLOWEEN;
+    if (mon == 11 && lt.tm_wday == 4 && day >= 22 && day <= 28) return &THANKS;   // fourth Thursday
+    if (mon == 12 && (day == 24 || day == 25)) return &CHRISTMAS;
+    if (mon == 12 && day == 31) return &NYE;
+    int em, ed;
+    easter(year, em, ed);
+    if (mon == em && day == ed) return &EASTER;
+    return nullptr;
+  }
+}

@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Matrix Weather Clock</title>
+<style>
+:root{--bg:#111418;--card:#1b2027;--line:#2b323c;--fg:#e6e9ee;--mut:#8b95a3;--acc:#3fa9f5;--ok:#3dbb6a;--warn:#f0a030;--bad:#e5484d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+header{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+header h1{font-size:18px;margin:0}header span{color:var(--mut);font-size:13px}
+nav{display:flex;gap:4px;padding:10px 12px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+nav button{background:none;border:1px solid transparent;color:var(--mut);padding:6px 12px;border-radius:6px;cursor:pointer}
+nav button.on{color:var(--fg);border-color:var(--line);background:var(--card)}
+main{padding:16px;max-width:900px;margin:0 auto}section{display:none}section.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.card h2{font-size:14px;margin:0 0 10px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 16px}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut)}
+input,select{background:#0d1014;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;font:inherit}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--acc)}label.chk{flex-direction:row;align-items:center;gap:8px;color:var(--fg)}
+.btn{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:8px 14px;font:inherit;cursor:pointer}
+.btn.sec{background:#2b323c}.btn.bad{background:var(--bad);color:#fff}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.msg{font-size:13px;color:var(--mut);min-height:1.2em}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:14px}td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}td:first-child{color:var(--mut);width:38%}
+.al{border-left:4px solid var(--warn);padding:6px 10px;margin:6px 0;background:#0d1014;border-radius:4px}
+.al.Extreme,.al.Severe{border-color:var(--bad)}.al.Minor{border-color:#e8d44d}.al small{color:var(--mut)}
+progress{width:100%;height:10px}
+</style>
+</head>
+<body>
+<header><h1>Matrix Weather Clock</h1><span id="hdr">connecting…</span></header>
+<nav>
+<button data-tab="status" class="on">Status</button><button data-tab="weather">Location &amp; Weather</button>
+<button data-tab="display">Display</button><button data-tab="alarms">Alarms</button><button data-tab="panel">Panel</button><button data-tab="audio">Audio</button>
+<button data-tab="notify">Notify</button><button data-tab="wifi">WiFi</button><button data-tab="update">Update</button>
+</nav>
+<main>
+
+<section id="status" class="on">
+ <div class="card"><h2>Live view</h2><canvas id="pv" width="512" height="256" style="width:100%;max-width:512px;background:#000;border-radius:6px;image-rendering:pixelated"></canvas>
+  <div class="row"><label class="chk"><input type="checkbox" id="pvlive" checked>Auto refresh</label><span class="msg" id="msg-pv"></span></div></div>
+ <div class="card"><h2>Now</h2><table id="st-now"></table></div>
+ <div class="card"><h2>Send a message</h2><div class="row"><input id="msgtext" placeholder="Text to scroll on the clock" maxlength="200" style="flex:1;min-width:200px">
+  <input id="msgsec" type="number" min="0" max="86400" value="30" style="width:80px" title="seconds, 0 = until cleared"><label class="chk"><input type="checkbox" id="msgchime">Chime</label>
+  <button class="btn" onclick="sendMsg()">Show</button><button class="btn sec" onclick="post('/api/message/clear')">Clear</button></div>
+  <p class="msg">Anything can push a message: <code>curl -X POST http://matrixclock.local/api/message -H 'Content-Type: application/json' -d '{"text":"Dinner is ready","seconds":60,"chime":true}'</code></p></div>
+ <div class="card"><h2>Alerts</h2><div id="st-alerts"></div>
+  <div class="row"><button class="btn sec" onclick="post('/api/show',null,'screen=forecast')">Show forecast</button><button class="btn sec" onclick="post('/api/show',null,'screen=hourly')">Show hourly graph</button>
+  <button class="btn sec" onclick="post('/api/alerts/ack',null,'id=all')">Acknowledge all</button>
+  <button class="btn sec" onclick="post('/api/refresh')">Refresh weather &amp; alerts</button></div></div>
+ <div class="card"><h2>System</h2><table id="st-sys"></table>
+  <div class="row"><button class="btn sec" onclick="post('/api/test/panel')">Panel test pattern</button>
+  <a class="btn sec" href="/api/log" target="_blank" style="text-decoration:none">View log</a></div></div>
+</section>
+
+<section id="weather">
+ <div class="card"><h2>Location</h2><div class="grid">
+  <label>Latitude<input data-k="location.lat" type="number" step="0.0001" min="-90" max="90"></label>
+  <label>Longitude<input data-k="location.lon" type="number" step="0.0001" min="-180" max="180"></label>
+  <label>Name (optional)<input data-k="location.name" maxlength="47"></label>
+  <label>Time zone<select id="tzsel" data-k="time.tz_id"></select></label>
+  <label>POSIX TZ (custom)<input data-k="time.tz_posix" maxlength="63"></label>
+  <label>NTP server 1<input data-k="time.ntp1" maxlength="47"></label>
+  <label>NTP server 2<input data-k="time.ntp2" maxlength="47"></label>
+  <label class="chk"><input data-k="time.use_24h" type="checkbox">24-hour clock</label>
+  <label class="chk"><input data-k="time.show_seconds" type="checkbox">Show seconds</label>
+ </div>
+ <div class="row"><input id="geoq" placeholder="City or ZIP code, e.g. Denver or 80202" style="min-width:240px" onkeydown="if(event.key==='Enter')geosearch()">
+  <button class="btn sec" onclick="geosearch()">Find</button>
+  <select id="geores" hidden onchange="geopick()"></select>
+  <button class="btn sec" id="geobtn" onclick="geo()" hidden>Use my location</button><span class="msg" id="msg-geo"></span></div>
+ <p class="msg">Pick a match to fill in the coordinates, then Save. Only the coordinates are used; the name is just a label.</p></div>
+ <div class="card"><h2>Weather (Open-Meteo)</h2><div class="grid">
+  <label class="chk"><input data-k="weather.enabled" type="checkbox">Enabled</label>
+  <label>Units<select data-k="weather.units"><option value="imperial">°F, mph</option><option value="metric">°C, km/h</option></select></label>
+  <label>Refresh (minutes)<input data-k="weather.refresh_min" type="number" min="5" max="1440"></label>
+  <label>Forecast days<input data-k="weather.forecast_days" type="number" min="1" max="3"></label>
+ </div></div>
+ <div class="card"><h2>NWS alerts (api.weather.gov)</h2><div class="grid">
+  <label class="chk"><input data-k="alerts.enabled" type="checkbox">Enabled</label>
+  <label>Contact for User-Agent (required by NWS)<input data-k="alerts.user_agent_contact" placeholder="you@example.com" maxlength="63"></label>
+  <label>Poll interval (seconds)<input data-k="alerts.poll_sec" type="number" min="60" max="3600"></label>
+  <label>Show alerts of at least<select data-k="alerts.min_severity"><option>Unknown</option><option>Minor</option><option>Moderate</option><option>Severe</option><option>Extreme</option></select></label>
+  <label>Chime for alerts of at least<select data-k="alerts.chime_min_severity"><option>Unknown</option><option>Minor</option><option>Moderate</option><option>Severe</option><option>Extreme</option></select></label>
+  <label>Ignore events (comma separated)<input data-k="alerts.ignored_events" data-list="1" placeholder="Special Weather Statement, Frost Advisory"></label>
+  <label>Flash frame for (seconds, 0 = off)<input data-k="alerts.flash_frame_sec" type="number" min="0" max="3600"></label>
+  <label>Banner speed (px/s)<input data-k="alerts.banner_px_per_s" type="number" min="5" max="80"></label>
+  <label class="chk"><input data-k="alerts.tls_verify" type="checkbox">Verify TLS certificate (needs /nws_root.pem)</label>
+ </div>
+ </div>
+ <div class="card"><h2>Lightning (Blitzortung network)</h2><div class="grid">
+  <label class="chk"><input data-k="lightning.enabled" type="checkbox">Enabled</label>
+  <label>Radius (km)<input data-k="lightning.radius_km" type="number" min="5" max="300"></label>
+  <label>Strikes count as nearby for (minutes)<input data-k="lightning.window_min" type="number" min="1" max="120"></label>
+  <label class="chk"><input data-k="lightning.chime" type="checkbox">Chime on the first strike of a storm</label>
+  <label class="chk"><input data-k="lightning.show_bolt" type="checkbox">Bolt icon and flash on the clock</label>
+  <label>MQTT relay<input data-k="lightning.server" maxlength="63"></label>
+  <label>Port<input data-k="lightning.port" type="number" min="1" max="65535"></label>
+ </div><p class="msg">Live strikes from the volunteer Blitzortung.org network through the community relay used by the Home Assistant integration (personal use only; no account needed). Uses your coordinates above.</p>
+ <div class="row"><button class="btn" onclick="save('weather')">Save</button>
+  <button class="btn sec" onclick="post('/api/test/alert',{event:'Tornado Warning',severity:'Extreme',headline:'Test tornado warning until 5 PM',minutes:3})">Inject test alert (3 min)</button>
+  <span class="msg" id="msg-weather"></span></div></div>
+</section>
+
+<section id="display">
+ <div class="card"><h2>Brightness</h2><div class="grid">
+  <label>Manual brightness (1-255)<input data-k="display.brightness" type="number" min="1" max="255"></label>
+  <label>Gamma<input data-k="display.gamma" type="number" step="0.1" min="1" max="3"></label>
+  <label class="chk"><input data-k="display.schedule.enabled" type="checkbox">Day/night schedule</label>
+  <label class="chk"><input data-k="display.schedule.follow_sun" type="checkbox">Follow sunrise/sunset instead of fixed times</label>
+  <label>Sun offset (minutes, day starts before sunrise / ends after sunset)<input data-k="display.schedule.sun_offset_min" type="number" min="-180" max="180"></label>
+  <label>Day starts<input data-k="display.schedule.day_start" type="time"></label>
+  <label>Day level<input data-k="display.schedule.day_level" type="number" min="1" max="255"></label>
+  <label>Night starts<input data-k="display.schedule.night_start" type="time"></label>
+  <label>Night level<input data-k="display.schedule.night_level" type="number" min="1" max="255"></label>
+  <label class="chk"><input data-k="display.night_mode.enabled" type="checkbox">Night mode (very dim, clock only)</label>
+  <label>Night mode from<input data-k="display.night_mode.start" type="time"></label>
+  <label>Night mode until<input data-k="display.night_mode.end" type="time"></label>
+  <label>Night mode level<input data-k="display.night_mode.level" type="number" min="1" max="255"></label>
+  <label class="chk"><input data-k="display.night_mode.hide_bottom" type="checkbox">Hide weather at night</label>
+ </div></div>
+ <div class="card"><h2>Pages</h2><div class="grid">
+  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun)<input data-k="display.pages" data-list="1"></label>
+  <label>Seconds per page<input data-k="display.page_sec" type="number" min="2" max="60"></label>
+  <label class="chk"><input data-k="display.forecast_page" type="checkbox">Show 3-day forecast screen</label>
+  <label>Forecast every N page cycles<input data-k="display.forecast_every_n_cycles" type="number" min="1" max="20"></label>
+  <label class="chk"><input data-k="display.colon_blink" type="checkbox">Blink colon</label>
+  <label class="chk"><input data-k="display.hourly_page" type="checkbox">Show 12-hour temperature / rain graph screen</label>
+  <label class="chk"><input data-k="display.transitions" type="checkbox">Slide transitions between pages</label>
+  <label class="chk"><input data-k="display.precip_fx" type="checkbox">Rain / snow / lightning animation behind the weather</label>
+  <label class="chk"><input data-k="display.holiday_themes" type="checkbox">Holiday colours and effects</label>
+  <label>Show IP address after connecting (seconds, 0 = off)<input data-k="display.ip_on_connect_sec" type="number" min="0" max="120"></label>
+ </div></div>
+ <div class="card"><h2>Colours</h2><div class="grid">
+  <label>Time<input data-k="display.colors.time" type="color"></label><label>Date<input data-k="display.colors.date" type="color"></label>
+  <label>Temperature<input data-k="display.colors.temp" type="color"></label><label>Text<input data-k="display.colors.text" type="color"></label>
+  <label>High<input data-k="display.colors.hi" type="color"></label><label>Low<input data-k="display.colors.lo" type="color"></label>
+ </div><div class="row"><button class="btn" onclick="save('display')">Save</button><span class="msg" id="msg-display"></span></div></div>
+</section>
+
+<section id="alarms">
+ <div class="card"><h2>Timer</h2><div class="row"><input id="timermin" type="number" min="1" max="1440" value="10" style="width:90px"> minutes
+  <button class="btn" onclick="post('/api/timer',{minutes:Number($('#timermin').value)})">Start</button><button class="btn sec" onclick="post('/api/timer/cancel')">Cancel</button>
+  <span class="msg" id="msg-timer"></span></div></div>
+  <div class="card"><h2>Alarm 1</h2><div class="grid">
+   <label class="chk"><input type="checkbox" class="al-en" data-i="0">Enabled</label>
+   <label>Time<input type="time" class="al-time" data-i="0"></label>
+   <label>Label<input class="al-label" data-i="0" maxlength="15" placeholder="optional"></label>
+   <label>Sound<select class="al-chime" data-i="0"><option value="triple_beep">Triple beep</option><option value="two_tone">Two tone</option><option value="chirp">Chirp</option></select></label>
+  </div><div class="row" style="gap:12px"><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="0" data-d="0">Mo</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="0" data-d="1">Tu</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="0" data-d="2">We</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="0" data-d="3">Th</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="0" data-d="4">Fr</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="0" data-d="5">Sa</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="0" data-d="6">Su</label></div></div>
+  <div class="card"><h2>Alarm 2</h2><div class="grid">
+   <label class="chk"><input type="checkbox" class="al-en" data-i="1">Enabled</label>
+   <label>Time<input type="time" class="al-time" data-i="1"></label>
+   <label>Label<input class="al-label" data-i="1" maxlength="15" placeholder="optional"></label>
+   <label>Sound<select class="al-chime" data-i="1"><option value="triple_beep">Triple beep</option><option value="two_tone">Two tone</option><option value="chirp">Chirp</option></select></label>
+  </div><div class="row" style="gap:12px"><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="1" data-d="0">Mo</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="1" data-d="1">Tu</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="1" data-d="2">We</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="1" data-d="3">Th</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="1" data-d="4">Fr</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="1" data-d="5">Sa</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="1" data-d="6">Su</label></div></div>
+  <div class="card"><h2>Alarm 3</h2><div class="grid">
+   <label class="chk"><input type="checkbox" class="al-en" data-i="2">Enabled</label>
+   <label>Time<input type="time" class="al-time" data-i="2"></label>
+   <label>Label<input class="al-label" data-i="2" maxlength="15" placeholder="optional"></label>
+   <label>Sound<select class="al-chime" data-i="2"><option value="triple_beep">Triple beep</option><option value="two_tone">Two tone</option><option value="chirp">Chirp</option></select></label>
+  </div><div class="row" style="gap:12px"><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="2" data-d="0">Mo</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="2" data-d="1">Tu</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="2" data-d="2">We</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="2" data-d="3">Th</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="2" data-d="4">Fr</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="2" data-d="5">Sa</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="2" data-d="6">Su</label></div></div>
+  <div class="card"><h2>Alarm 4</h2><div class="grid">
+   <label class="chk"><input type="checkbox" class="al-en" data-i="3">Enabled</label>
+   <label>Time<input type="time" class="al-time" data-i="3"></label>
+   <label>Label<input class="al-label" data-i="3" maxlength="15" placeholder="optional"></label>
+   <label>Sound<select class="al-chime" data-i="3"><option value="triple_beep">Triple beep</option><option value="two_tone">Two tone</option><option value="chirp">Chirp</option></select></label>
+  </div><div class="row" style="gap:12px"><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="0">Mo</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="1">Tu</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="2">We</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="3">Th</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="4">Fr</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="5">Sa</label><label class="chk" style="gap:3px"><input type="checkbox" class="al-day" data-i="3" data-d="6">Su</label></div></div>
+ <div class="card"><div class="row"><button class="btn" onclick="saveAlarms()">Save alarms</button><span class="msg" id="msg-alarms"></span></div>
+  <p class="msg">A ringing alarm repeats its sound every few seconds for up to 10 minutes and ignores quiet hours. Wheel push = stop, wheel up/down = snooze 9 minutes.</p></div>
+</section>
+
+<section id="panel">
+ <div class="card"><h2>HUB75 panel (changes need a reboot)</h2><div class="grid">
+  <label>Width<input data-k="panel.width" type="number" min="32" max="128"></label>
+  <label>Height<input data-k="panel.height" type="number" min="16" max="64"></label>
+  <label>Chained panels<input data-k="panel.chain" type="number" min="1" max="4"></label>
+  <label>Driver IC<select data-k="panel.driver"><option>SHIFTREG</option><option>FM6124</option><option>FM6126A</option><option>ICN2038S</option><option>MBI5124</option><option>DP3246</option></select></label>
+  <label class="chk"><input data-k="panel.clkphase" type="checkbox">Clock phase (untick if pixels shift/ghost)</label>
+  <label>Latch blanking (1-4, higher = less ghosting)<input data-k="panel.latch_blanking" type="number" min="1" max="4"></label>
+  <label>Min refresh (Hz)<input data-k="panel.min_refresh_hz" type="number" min="30" max="250"></label>
+  <label>Colour depth (bits)<input data-k="panel.color_depth_bits" type="number" min="4" max="8"></label>
+  <label>Max brightness cap<input data-k="panel.max_brightness" type="number" min="1" max="255"></label>
+  <label class="chk"><input data-k="panel.double_buffer" type="checkbox">Double buffer</label>
+  <label class="chk"><input data-k="panel.swap_rb" type="checkbox">Swap red/blue</label>
+ </div><div class="row"><button class="btn" onclick="save('panel')">Save</button><button class="btn sec" onclick="post('/api/reboot')">Reboot</button>
+  <button class="btn sec" onclick="post('/api/test/panel',null,'sec='+$('#testsec').value)">Run test pattern</button>
+  <select id="testsec"><option value="10">10 s</option><option value="30">30 s</option><option value="60">60 s</option><option value="300">5 min</option></select>
+  <span class="msg" id="msg-panel"></span></div>
+ <p class="msg">Test pattern: solid red, green, blue, white → border with coloured corner markers and a diagonal → colour gradients and a grey ramp → info text. Stray pixels in a corner during the solid or gradient phases point at latch timing: raise latch blanking to 3 or 4 (applies without reboot), then try clock phase off.</p>
+ <p class="msg">Symptoms: dark panel → try FM6126A or ICN2038S; washed-out colours → FM6124; ghost columns → latch blanking 3-4 and clock phase off; flicker → higher min refresh or 6-bit depth.</p></div>
+</section>
+
+<section id="audio">
+ <div class="card"><h2>Alert chime</h2><div class="grid">
+  <label class="chk"><input data-k="audio.enabled" type="checkbox">Enabled</label>
+  <label>Volume (%)<input data-k="audio.volume" type="number" min="0" max="100"></label>
+  <label>Chime<select data-k="audio.chime"><option value="two_tone">Two tone</option><option value="triple_beep">Triple beep</option><option value="chirp">Chirp</option><option value="none">None</option></select></label>
+  <label>Repeat every N minutes while unacknowledged (0 = once)<input data-k="audio.repeat_min" type="number" min="0" max="120"></label>
+  <label class="chk"><input data-k="audio.quiet.enabled" type="checkbox">Quiet hours</label>
+  <label>Quiet from<input data-k="audio.quiet.start" type="time"></label>
+  <label>Quiet until<input data-k="audio.quiet.end" type="time"></label>
+ </div><div class="row"><button class="btn" onclick="save('audio')">Save</button>
+  <button class="btn sec" onclick="post('/api/test/chime',{force:true})">Test chime</button><span class="msg" id="msg-audio"></span></div></div>
+</section>
+
+<section id="notify">
+ <div class="card"><h2>Pushbullet</h2><div class="grid">
+  <label>Access token (Pushbullet → Settings → Account)<input data-k="pushbullet.token" type="password" maxlength="39"></label>
+  <label class="chk"><input data-k="pushbullet.notify_alerts" type="checkbox">Push new weather alerts to my phone</label>
+  <label>Only alerts of at least<select data-k="pushbullet.notify_min_severity"><option>Unknown</option><option>Minor</option><option>Moderate</option><option>Severe</option><option>Extreme</option></select></label>
+  <label class="chk"><input data-k="pushbullet.notify_lightning" type="checkbox">Push nearby lightning</label>
+  <label class="chk"><input data-k="pushbullet.notify_alarms" type="checkbox">Push alarms and finished timers</label>
+  <label class="chk"><input data-k="pushbullet.show_pushes" type="checkbox">Show pushes sent to me on the clock</label>
+  <label>Check for pushes every (seconds)<input data-k="pushbullet.poll_sec" type="number" min="15" max="3600"></label>
+  <label>Show a push for (seconds, 0 = until cleared)<input data-k="pushbullet.show_sec" type="number" min="0" max="3600"></label>
+  <label class="chk"><input data-k="pushbullet.chime" type="checkbox">Chime when a push is shown</label>
+ </div>
+ <div class="row"><button class="btn" onclick="save('notify')">Save</button><button class="btn sec" onclick="post('/api/test/push')">Send test push</button><span class="msg" id="msg-notify"></span></div>
+ <p class="msg">The clock registers itself as a device called "Matrix Clock" in your Pushbullet account, so you can push text to it from the phone app (choose the device) or from IFTTT / scripts. Leave the token as *** to keep the stored one.</p></div>
+</section>
+
+<section id="wifi">
+ <div class="card"><h2>Network</h2><div class="grid">
+  <label>SSID<input data-k="wifi.ssid" list="ssids" maxlength="32"><datalist id="ssids"></datalist></label>
+  <label>Password<input data-k="wifi.pass" type="password" maxlength="64"></label>
+  <label>Hostname<input data-k="wifi.hostname" maxlength="31"></label>
+  <label>Setup AP password (blank = open)<input data-k="wifi.ap_pass" type="password" maxlength="64"></label>
+  <label>TX power<select data-k="wifi.tx_power" data-num="1"><option value="78">19.5 dBm (max)</option><option value="60">15 dBm</option><option value="44">11 dBm</option><option value="34">8.5 dBm (default)</option><option value="20">5 dBm</option><option value="8">2 dBm</option></select></label>
+ </div><div class="row"><button class="btn" onclick="save('wifi')">Save &amp; connect</button><button class="btn sec" onclick="scan()">Scan networks</button><span class="msg" id="msg-wifi"></span></div>
+ <p class="msg">Leave the password as *** to keep the stored one. After saving new credentials the clock connects; the setup AP disappears once it is online.</p></div>
+ <div class="card"><h2>Danger zone</h2>
+  <p class="msg">Factory reset erases every setting stored on the clock: WiFi credentials, location and time zone, alert, display, panel and audio settings, alarms, and the Pushbullet token. The clock then reboots into the setup access point (MatrixClock-XXXX / http://4.3.2.1/) as on first use. The firmware itself is not changed. Consider downloading a backup on the Update tab first.</p>
+  <div class="row"><button class="btn bad" onclick="if(confirm('Erase all settings and reboot into setup mode?'))post('/api/factory-reset',null,'confirm=yes')">Factory reset</button></div></div>
+</section>
+
+<section id="update">
+ <div class="card"><h2>Settings backup</h2><div class="row"><a class="btn sec" href="/api/config?download=1" style="text-decoration:none">Download backup</a>
+  <input type="file" id="cfgfile" accept=".json"><button class="btn sec" onclick="restoreCfg()">Restore</button><span class="msg" id="msg-backup"></span></div>
+  <p class="msg">The backup contains WiFi passwords. Restoring applies every section and reboots if panel settings changed.</p></div>
+ <div class="card"><h2>Firmware update</h2>
+  <p class="msg">Upload <code>.pio/build/seengreat_hub75_s3/firmware.bin</code>. The clock reboots when the upload succeeds; settings are kept.</p>
+  <div class="row"><input type="file" id="fw" accept=".bin"><button class="btn" onclick="ota()">Upload</button></div>
+  <progress id="otap" value="0" max="100" hidden></progress><div class="msg" id="msg-update"></div></div>
+</section>
+</main>
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+let cfg=null;
+$$('nav button').forEach(b=>b.onclick=()=>{$$('nav button').forEach(x=>x.classList.toggle('on',x===b));$$('main section').forEach(s=>s.classList.toggle('on',s.id===b.dataset.tab));});
+function get(o,p){return p.split('.').reduce((a,k)=>a==null?undefined:a[k],o)}
+function set(o,p,v){const ks=p.split('.');let a=o;ks.slice(0,-1).forEach(k=>{a=a[k]=a[k]||{}});a[ks.at(-1)]=v}
+function fill(){$$('[data-k]').forEach(el=>{let v=get(cfg,el.dataset.k);if(v===undefined)return;
+ if(el.type==='checkbox')el.checked=!!v;else if(el.dataset.list)el.value=(v||[]).join(', ');else if(el.type==='color')el.value=String(v).toLowerCase();else el.value=v;});}
+function collect(section){const o={};$$('#'+section+' [data-k]').forEach(el=>{let v;
+ if(el.type==='checkbox')v=el.checked;else if(el.dataset.list)v=el.value.split(',').map(s=>s.trim()).filter(Boolean);
+ else if(el.type==='number'||el.dataset.num)v=el.value===''?undefined:Number(el.value);else if(el.type==='color')v=el.value.toUpperCase();else v=el.value;
+ if(v!==undefined)set(o,el.dataset.k,v);});return o;}
+function say(id,txt,cls){const m=$('#msg-'+id);if(!m)return;m.textContent=txt;m.className='msg '+(cls||'');}
+async function post(url,body,form){try{const r=await fetch(url,{method:'POST',headers:{'Content-Type':form?'application/x-www-form-urlencoded':'application/json'},body:form?form:(body?JSON.stringify(body):null)});
+ const j=await r.json().catch(()=>({}));if(!r.ok||j.ok===false)alert(j.error||('HTTP '+r.status));else setTimeout(status,800);return j;}catch(e){alert(e);}}
+async function save(section){const body=collect(section);if(section==='weather'){const t=$('#tzsel');const opt=t.selectedOptions[0];if(opt&&opt.dataset.posix&&body.time.tz_posix===opt.dataset.posix)delete body.time.tz_posix;}
+ say(section,'saving…');try{const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();
+ if(!r.ok||!j.ok){say(section,j.error||('HTTP '+r.status),'bad');return;}
+ say(section,'saved'+(j.reboot_required&&j.reboot_required.length?' — reboot required for: '+j.reboot_required.join(', '):''),j.reboot_required&&j.reboot_required.length?'warn':'ok');
+ loadConfig();}catch(e){say(section,String(e),'bad');}}
+async function loadConfig(){const r=await fetch('/api/config');cfg=await r.json();const t=$('#tzsel');t.innerHTML='';(cfg.tz_options||[]).forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;t.appendChild(o);});
+ const custom=document.createElement('option');custom.value=cfg.time.tz_id;custom.textContent='Custom';if(!(cfg.tz_options||[]).some(z=>z.id===cfg.time.tz_id))t.appendChild(custom);
+ fill();if(cfg.alarms)fillAlarms();t.onchange=()=>{const o=t.selectedOptions[0];if(o&&o.dataset.posix)$('[data-k="time.tz_posix"]').value=o.dataset.posix;};}
+async function sendMsg(){const t=$('#msgtext').value.trim();if(!t)return;await post('/api/message',{text:t,seconds:Number($('#msgsec').value)||0,chime:$('#msgchime').checked});}
+function fillAlarms(){(cfg.alarms||[]).forEach((a,i)=>{$('.al-en[data-i="'+i+'"]').checked=!!a.enabled;$('.al-time[data-i="'+i+'"]').value=a.time||'07:00';$('.al-label[data-i="'+i+'"]').value=a.label||'';$('.al-chime[data-i="'+i+'"]').value=a.chime||'triple_beep';
+ $$('.al-day[data-i="'+i+'"]').forEach(d=>d.checked=(a.days||'0000000')[Number(d.dataset.d)]==='1');});}
+async function saveAlarms(){const alarms=[];for(let i=0;i<4;i++){let days='';for(let d=0;d<7;d++)days+=$('.al-day[data-i="'+i+'"][data-d="'+d+'"]').checked?'1':'0';
+ alarms.push({enabled:$('.al-en[data-i="'+i+'"]').checked,time:$('.al-time[data-i="'+i+'"]').value||'07:00',days,label:$('.al-label[data-i="'+i+'"]').value,chime:$('.al-chime[data-i="'+i+'"]').value});}
+ say('alarms','saving…');const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({alarms})});const j=await r.json();say('alarms',j.ok?'saved':(j.error||'failed'),j.ok?'ok':'bad');}
+async function restoreCfg(){const f=$('#cfgfile').files[0];if(!f)return say('backup','choose a backup file','bad');try{const j=JSON.parse(await f.text());delete j.tz_options;
+ const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(j)});const k=await r.json();say('backup',k.ok?'restored'+(k.reboot_required&&k.reboot_required.length?', reboot required':''):(k.error||'failed'),k.ok?'ok':'bad');loadConfig();}catch(e){say('backup','invalid file: '+e,'bad');}}
+let pvBusy=false;
+async function preview(){if(pvBusy||!$('#pvlive').checked||!$('#status').classList.contains('on'))return;pvBusy=true;try{const r=await fetch('/api/frame',{cache:'no-store'});const b=new Uint8Array(await r.arrayBuffer());
+ const [w,h]=(r.headers.get('X-Frame-Size')||'64x32').split('x').map(Number);const cv=$('#pv');cv.width=w*8;cv.height=h*8;const g=cv.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,cv.width,cv.height);
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*2;const v=b[i]|(b[i+1]<<8);if(!v)continue;const R=((v>>11)&31)*255/31,G=((v>>5)&63)*255/63,B=(v&31)*255/31;g.fillStyle='rgb('+R+','+G+','+B+')';g.beginPath();g.arc(x*8+4,y*8+4,3.2,0,6.283);g.fill();}
+ }catch(e){}pvBusy=false;}
+function row(t,k,v){t.insertAdjacentHTML('beforeend','<tr><td>'+k+'</td><td>'+v+'</td></tr>')}
+function ago(s){return s?Math.round(s/60)+' min ago':'never'}
+async function status(){try{const r=await fetch('/api/status');const s=await r.json();
+ $('#hdr').textContent=(s.wifi.connected?'online '+s.wifi.ip+' ('+s.wifi.rssi+' dBm)':s.wifi.ap?'setup AP '+s.wifi.ap_ssid:'offline')+' · v'+s.version;
+ const n=$('#st-now');n.innerHTML='';row(n,'Local time',s.time.valid?s.time.local+' <small>('+s.time.source+')</small>':'<span class="warn">not set</span>');
+ if(s.weather.valid){const c=s.weather.cur,u=s.weather.units==='imperial';row(n,'Weather',c.text+', '+Math.round(c.temp)+'°'+(u?'F':'C')+' (feels '+Math.round(c.feels)+'°), humidity '+Math.round(c.humidity)+'%, wind '+Math.round(c.wind)+(u?' mph':' km/h'));
+ (s.weather.daily||[]).forEach(d=>row(n,d.date,d.text+' '+Math.round(d.tmax)+'° / '+Math.round(d.tmin)+'°, rain '+d.pop+'%'));row(n,'Weather updated',ago(s.weather.age_s)+(s.net.wx_err?' <span class="bad">'+s.net.wx_err+'</span>':''));}
+ else row(n,'Weather','<span class="warn">no data'+(s.net.wx_err?': '+s.net.wx_err:'')+'</span>');
+ row(n,'Alerts checked',ago(s.net.al_ok_age_s)+(s.net.al_err?' <span class="bad">'+s.net.al_err+'</span>':'')+(s.alerts.stale?' <span class="warn">stale</span>':''));
+ const a=$('#st-alerts');a.innerHTML=s.alerts.items.length?'':'<span class="msg">No active alerts for your location.</span>';
+ s.alerts.items.forEach(x=>a.insertAdjacentHTML('beforeend','<div class="al '+x.severity+'"><b>'+x.event+'</b> <small>'+x.severity+(x.test?' · TEST':'')+(x.acknowledged?' · acknowledged':'')+'</small><br>'+x.headline+'<br><small>'+x.sender+' · '+x.area+'</small></div>'));
+ const y=$('#st-sys');y.innerHTML='';row(y,'Uptime',Math.floor(s.uptime_s/3600)+'h '+Math.floor(s.uptime_s%3600/60)+'m');row(y,'Screen',s.sys.screen+(s.sys.night?' (night)':'')+', brightness '+s.sys.brightness);
+ row(y,'Forecast / hourly screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
+ row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
+ row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
+ const P=s.pushbullet||{};if(P.configured)row(y,'Pushbullet',(P.device_ok?'registered':'<span class="warn">device not registered</span>')+', sent '+P.sent+', received '+P.received+(P.last_err?' <span class="bad">'+P.last_err+'</span>':''));
+ if(s.sys.theme)row(y,'Theme',s.sys.theme);
+ const a2=s.alarm||{};if(a2.ringing)row(n,'Alarm','<span class="bad">'+(a2.ringing_timer?'timer done':'ringing '+(a2.label||''))+'</span> <button class="btn sec" onclick="post(\'/api/alarm/stop\')">Stop</button> <button class="btn sec" onclick="post(\'/api/alarm/snooze\')">Snooze</button>');
+ else if(a2.snoozed)row(n,'Alarm','snoozed, '+Math.ceil(a2.snooze_remaining_s/60)+' min left');
+ if(a2.timer_running)row(n,'Timer',Math.floor(a2.timer_remaining_s/60)+':'+String(a2.timer_remaining_s%60).padStart(2,'0')+' remaining <button class="btn sec" onclick="post(\'/api/timer/cancel\')">Cancel</button>');
+ if(s.message&&s.message.active)row(n,'Message','"'+s.message.text+'"'+(s.message.remaining_s?' ('+s.message.remaining_s+' s)':''));
+ const L=s.lightning||{};if(L.enabled)row(n,'Lightning',(L.connected?'':'<span class="warn">not connected</span> ')+(L.active?'<span class="warn">'+L.count+' strike(s) nearby, latest '+L.latest_km.toFixed(1)+' km '+Math.round(L.latest_age_s/60)+' min ago</span>':'none nearby')+' · '+L.total+' total');
+ row(y,'I2C','ES8311 0x'+s.i2c.es8311.toString(16)+', PCA9557 0x'+s.i2c.pca9557.toString(16)+', RTC 0x'+s.i2c.rtc.toString(16)+(s.time.rtc_present?'':' (missing)'));
+ if(s.sys.reboot_required)row(y,'Note','<span class="warn">reboot required to apply panel settings</span>');}catch(e){$('#hdr').textContent='unreachable';}}
+let geoResults=[];
+async function geosearch(){const q=$('#geoq').value.trim();if(q.length<2)return say('geo','type at least 2 characters','bad');say('geo','searching…');
+ try{const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(q)+'&count=8&language=en&format=json');const j=await r.json();geoResults=j.results||[];
+ const sel=$('#geores');sel.innerHTML='';if(!geoResults.length){sel.hidden=true;return say('geo','no match','bad');}
+ geoResults.forEach((g,i)=>{const o=document.createElement('option');o.value=i;o.textContent=[g.name,g.admin1,g.country_code].filter(Boolean).join(', ')+' ('+g.latitude.toFixed(3)+', '+g.longitude.toFixed(3)+')';sel.appendChild(o);});
+ sel.hidden=false;say('geo',geoResults.length+' match'+(geoResults.length>1?'es, pick one':''),'ok');geopick();}catch(e){say('geo','lookup failed: '+e,'bad');}}
+function geopick(){const g=geoResults[$('#geores').value];if(!g)return;$('[data-k="location.lat"]').value=g.latitude.toFixed(4);$('[data-k="location.lon"]').value=g.longitude.toFixed(4);
+ $('[data-k="location.name"]').value=[g.name,g.admin1].filter(Boolean).join(', ').slice(0,47);}
+if(window.isSecureContext&&navigator.geolocation)$('#geobtn').hidden=false;
+function geo(){if(!navigator.geolocation)return alert('Geolocation not available');navigator.geolocation.getCurrentPosition(p=>{$('[data-k="location.lat"]').value=p.coords.latitude.toFixed(4);$('[data-k="location.lon"]').value=p.coords.longitude.toFixed(4);},e=>alert(e.message));}
+async function scan(){say('wifi','scanning…');await fetch('/api/wifi/scan?start=1');for(let i=0;i<10;i++){await new Promise(r=>setTimeout(r,1200));const j=await (await fetch('/api/wifi/scan?poll=1')).json();
+ if(!j.scanning){const d=$('#ssids');d.innerHTML='';(j.networks||[]).sort((a,b)=>b.rssi-a.rssi).forEach(n=>{const o=document.createElement('option');o.value=n.ssid;o.label=n.ssid+' ('+n.rssi+' dBm)';d.appendChild(o);});say('wifi',(j.networks||[]).length+' networks found','ok');return;}}say('wifi','scan timed out','bad');}
+function ota(){const f=$('#fw').files[0];if(!f)return say('update','choose a firmware file first','bad');const x=new XMLHttpRequest();const p=$('#otap');p.hidden=false;
+ x.upload.onprogress=e=>{if(e.lengthComputable)p.value=Math.round(e.loaded*100/e.total)};x.onload=()=>{let j={};try{j=JSON.parse(x.responseText)}catch(e){}if(x.status===200&&j.ok){say('update','uploaded, rebooting… reload this page in ~15 s','ok');}else say('update','failed: '+(j.error||x.status),'bad');};
+ x.onerror=()=>say('update','upload error','bad');const fd=new FormData();fd.append('firmware',f,f.name);x.open('POST','/update');x.send(fd);say('update','uploading…');}
+loadConfig().then(fillAlarms).catch(e=>say('wifi','config load failed: '+e,'bad'));status();setInterval(status,5000);preview();setInterval(preview,400);
+</script>
+</body>
+</html>

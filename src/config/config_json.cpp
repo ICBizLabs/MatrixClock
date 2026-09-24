@@ -1,0 +1,518 @@
+// AppConfig <-> JSON in both directions, with server-side validation. One place for every key name.
+#include "config.h"
+#include "util/timeutil.h"
+#include <strings.h>
+
+namespace {
+  const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
+  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun" };
+  const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp" };
+  const char* const DRIVER_NAMES[] = { "SHIFTREG", "FM6124", "FM6126A", "ICN2038S", "MBI5124", "DP3246" };
+
+  bool nameLookup(const char* const* names, size_t n, const char* s, uint8_t& out) {
+    if (!s) return false;
+    for (size_t i = 0; i < n; i++) if (strcasecmp(names[i], s) == 0) { out = (uint8_t)i; return true; }
+    return false;
+  }
+
+  // ---- readers: each returns false only on a validation error; sets touched when the key exists ----
+  template <size_t N>
+  bool getStr(JsonObjectConst o, const char* k, char (&dst)[N], bool& touched, String& err, bool allowEmpty = true) {
+    JsonVariantConst v = o[k];
+    if (v.isNull()) return true;
+    if (!v.is<const char*>()) { err = String(k) + ": must be a string"; return false; }
+    const char* s = v.as<const char*>();
+    if (!allowEmpty && s[0] == '\0') { err = String(k) + ": must not be empty"; return false; }
+    if (strlen(s) >= N) { err = String(k) + ": too long"; return false; }
+    strlcpy(dst, s, N);
+    touched = true;
+    return true;
+  }
+  bool getBool(JsonObjectConst o, const char* k, bool& dst, bool& touched, String& err) {
+    JsonVariantConst v = o[k];
+    if (v.isNull()) return true;
+    if (!v.is<bool>()) { err = String(k) + ": must be true/false"; return false; }
+    dst = v.as<bool>();
+    touched = true;
+    return true;
+  }
+  template <typename T>
+  bool getNum(JsonObjectConst o, const char* k, T& dst, bool& touched, String& err, double lo, double hi) {
+    JsonVariantConst v = o[k];
+    if (v.isNull()) return true;
+    double d;
+    if (v.is<double>() || v.is<long>()) d = v.as<double>();
+    else if (v.is<const char*>()) {                       // accept "34" as well as 34 (HTML selects send strings)
+      const char* str = v.as<const char*>();
+      char* end = nullptr;
+      d = strtod(str, &end);
+      if (end == str || *end != '\0') { err = String(k) + ": must be a number"; return false; }
+    } else { err = String(k) + ": must be a number"; return false; }
+    if (d < lo || d > hi) { err = String(k) + ": out of range"; return false; }
+    dst = (T)d;
+    touched = true;
+    return true;
+  }
+  bool getHHMM(JsonObjectConst o, const char* k, uint16_t& dst, bool& touched, String& err) {
+    JsonVariantConst v = o[k];
+    if (v.isNull()) return true;
+    int m = v.is<const char*>() ? hhmm_parse(v.as<const char*>()) : -1;
+    if (m < 0) { err = String(k) + ": expected HH:MM"; return false; }
+    dst = (uint16_t)m;
+    touched = true;
+    return true;
+  }
+  bool getColor(JsonObjectConst o, const char* k, uint32_t& dst, bool& touched, String& err) {
+    JsonVariantConst v = o[k];
+    if (v.isNull()) return true;
+    const char* s = v.as<const char*>();
+    if (!s || s[0] != '#' || strlen(s) != 7) { err = String(k) + ": expected #RRGGBB"; return false; }
+    char* end = nullptr;
+    unsigned long val = strtoul(s + 1, &end, 16);
+    if (!end || *end != '\0') { err = String(k) + ": expected #RRGGBB"; return false; }
+    dst = (uint32_t)val;
+    touched = true;
+    return true;
+  }
+  bool getSeverity(JsonObjectConst o, const char* k, Severity& dst, bool& touched, String& err) {
+    JsonVariantConst v = o[k];
+    if (v.isNull()) return true;
+    Severity s;
+    if (!severity_parse(v.as<const char*>(), s)) { err = String(k) + ": unknown severity"; return false; }
+    dst = s;
+    touched = true;
+    return true;
+  }
+
+  void colorToHex(uint32_t c, char* out, size_t n) { snprintf(out, n, "#%06lX", (unsigned long)(c & 0xFFFFFF)); }
+  void putHHMM(JsonObject o, const char* k, uint16_t m) { char b[8]; hhmm_format(m, b, sizeof(b)); o[k] = b; }
+  void putColor(JsonObject o, const char* k, uint32_t c) { char b[10]; colorToHex(c, b, sizeof(b)); o[k] = b; }
+
+  bool validHostname(const char* h) {
+    size_t n = strlen(h);
+    if (n == 0 || n > 31) return false;
+    for (size_t i = 0; i < n; i++) {
+      char c = h[i];
+      if (!(isalnum((unsigned char)c) || c == '-')) return false;
+      if (isupper((unsigned char)c)) return false;
+    }
+    return h[0] != '-' && h[n - 1] != '-';
+  }
+}
+
+const char* severity_name(Severity s) { uint8_t i = (uint8_t)s; return i < 5 ? SEVERITY_NAMES[i] : "Unknown"; }
+bool severity_parse(const char* s, Severity& out) { uint8_t i; if (!nameLookup(SEVERITY_NAMES, 5, s, i)) return false; out = (Severity)i; return true; }
+const char* page_name(uint8_t id) { return id < PAGE_COUNT ? PAGE_NAMES[id] : "?"; }
+bool page_parse(const char* s, uint8_t& out) { return nameLookup(PAGE_NAMES, PAGE_COUNT, s, out); }
+const char* chime_name(ChimeStyle c) { uint8_t i = (uint8_t)c; return i < 4 ? CHIME_NAMES[i] : "none"; }
+bool chime_parse(const char* s, ChimeStyle& out) { uint8_t i; if (!nameLookup(CHIME_NAMES, 4, s, i)) return false; out = (ChimeStyle)i; return true; }
+const char* panel_driver_name(uint8_t d) { return d < PANEL_DRIVER_COUNT ? DRIVER_NAMES[d] : DRIVER_NAMES[0]; }
+bool panel_driver_parse(const char* s, uint8_t& out) { return nameLookup(DRIVER_NAMES, PANEL_DRIVER_COUNT, s, out); }
+
+bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, String& err) {
+  if (src.isNull()) { err = "expected a JSON object"; return false; }
+  bool t;
+
+  JsonObjectConst o = src["wifi"];
+  if (!o.isNull()) {
+    t = false;
+    if (!getStr(o, "ssid", c.wifi.ssid, t, err)) return false;
+    JsonVariantConst p = o["pass"];
+    if (p.is<const char*>() && strcmp(p.as<const char*>(), "***") != 0) {   // "***" keeps the stored secret
+      if (!getStr(o, "pass", c.wifi.pass, t, err)) return false;
+    }
+    JsonVariantConst ap = o["ap_pass"];
+    if (ap.is<const char*>() && strcmp(ap.as<const char*>(), "***") != 0) {
+      if (!getStr(o, "ap_pass", c.wifi.ap_pass, t, err)) return false;
+      if (c.wifi.ap_pass[0] && strlen(c.wifi.ap_pass) < 8) { err = "ap_pass: at least 8 characters"; return false; }
+    }
+    if (!getStr(o, "hostname", c.wifi.hostname, t, err)) return false;
+    if (!validHostname(c.wifi.hostname)) { err = "hostname: use 1-31 lowercase letters, digits or '-'"; return false; }
+    if (!getNum(o, "tx_power", c.wifi.tx_power, t, err, 8, 84)) return false;
+    if (t) changed |= CHG_WIFI;
+  }
+
+  o = src["location"];
+  if (!o.isNull()) {
+    t = false;
+    if (!getNum(o, "lat", c.location.lat, t, err, -90, 90)) return false;
+    if (!getNum(o, "lon", c.location.lon, t, err, -180, 180)) return false;
+    if (!getStr(o, "name", c.location.name, t, err)) return false;
+    if (t) changed |= CHG_LOCATION;
+  }
+
+  o = src["time"];
+  if (!o.isNull()) {
+    t = false;
+    if (!getStr(o, "tz_id", c.time.tz_id, t, err)) return false;
+    if (!getStr(o, "tz_posix", c.time.tz_posix, t, err, false)) return false;
+    if (!getStr(o, "ntp1", c.time.ntp1, t, err, false)) return false;
+    if (!getStr(o, "ntp2", c.time.ntp2, t, err)) return false;
+    if (!getBool(o, "use_24h", c.time.use_24h, t, err)) return false;
+    if (!getBool(o, "show_seconds", c.time.show_seconds, t, err)) return false;
+    if (t) changed |= CHG_TIME;
+  }
+
+  o = src["weather"];
+  if (!o.isNull()) {
+    t = false;
+    if (!getBool(o, "enabled", c.weather.enabled, t, err)) return false;
+    JsonVariantConst u = o["units"];
+    if (!u.isNull()) {
+      const char* s = u.as<const char*>();
+      if (s && strcasecmp(s, "imperial") == 0) c.weather.imperial = true;
+      else if (s && strcasecmp(s, "metric") == 0) c.weather.imperial = false;
+      else { err = "units: imperial or metric"; return false; }
+      t = true;
+    }
+    if (!getNum(o, "refresh_min", c.weather.refresh_min, t, err, 5, 1440)) return false;
+    if (!getNum(o, "forecast_days", c.weather.forecast_days, t, err, 1, 3)) return false;
+    if (t) changed |= CHG_WEATHER;
+  }
+
+  o = src["alerts"];
+  if (!o.isNull()) {
+    t = false;
+    if (!getBool(o, "enabled", c.alerts.enabled, t, err)) return false;
+    if (!getNum(o, "poll_sec", c.alerts.poll_sec, t, err, 60, 3600)) return false;
+    if (!getStr(o, "user_agent_contact", c.alerts.user_agent_contact, t, err)) return false;
+    if (!getSeverity(o, "min_severity", c.alerts.min_severity, t, err)) return false;
+    JsonVariantConst ig = o["ignored_events"];
+    if (!ig.isNull()) {
+      String joined;
+      if (ig.is<JsonArrayConst>()) {
+        for (JsonVariantConst v : ig.as<JsonArrayConst>()) {
+          const char* s = v.as<const char*>();
+          if (!s || !*s) continue;
+          if (joined.length()) joined += ',';
+          joined += s;
+        }
+      } else if (ig.is<const char*>()) joined = ig.as<const char*>();
+      else { err = "ignored_events: expected an array of strings"; return false; }
+      if (joined.length() >= sizeof(c.alerts.ignored_events)) { err = "ignored_events: too long"; return false; }
+      strlcpy(c.alerts.ignored_events, joined.c_str(), sizeof(c.alerts.ignored_events));
+      t = true;
+    }
+    if (!getSeverity(o, "chime_min_severity", c.alerts.chime_min_severity, t, err)) return false;
+    if (!getNum(o, "flash_frame_sec", c.alerts.flash_frame_sec, t, err, 0, 3600)) return false;
+    if (!getNum(o, "banner_px_per_s", c.alerts.banner_px_per_s, t, err, 5, 80)) return false;
+    if (!getBool(o, "tls_verify", c.alerts.tls_verify, t, err)) return false;
+    if (t) changed |= CHG_ALERTS;
+  }
+
+  o = src["display"];
+  if (!o.isNull()) {
+    t = false;
+    DisplayConfig& d = c.display;
+    if (!getNum(o, "brightness", d.brightness, t, err, 1, 255)) return false;
+    if (!getNum(o, "gamma", d.gamma, t, err, 1.0, 3.0)) return false;
+    if (!getNum(o, "page_sec", d.page_sec, t, err, 2, 60)) return false;
+    JsonVariantConst pg = o["pages"];
+    if (!pg.isNull()) {
+      if (!pg.is<JsonArrayConst>()) { err = "pages: expected an array"; return false; }
+      uint8_t n = 0;
+      for (JsonVariantConst v : pg.as<JsonArrayConst>()) {
+        uint8_t id;
+        if (!page_parse(v.as<const char*>(), id)) { err = "pages: unknown page name"; return false; }
+        if (n < PAGE_COUNT) d.pages[n++] = id;
+      }
+      if (n == 0) { err = "pages: at least one page"; return false; }
+      d.npages = n;
+      t = true;
+    }
+    if (!getBool(o, "forecast_page", d.forecast_page, t, err)) return false;
+    if (!getNum(o, "forecast_every_n_cycles", d.forecast_every_n_cycles, t, err, 1, 20)) return false;
+    if (!getBool(o, "colon_blink", d.colon_blink, t, err)) return false;
+    if (!getNum(o, "ip_on_connect_sec", d.ip_on_connect_sec, t, err, 0, 120)) return false;
+    if (!getBool(o, "hourly_page", d.hourly_page, t, err)) return false;
+    if (!getBool(o, "transitions", d.transitions, t, err)) return false;
+    if (!getBool(o, "precip_fx", d.precip_fx, t, err)) return false;
+    if (!getBool(o, "holiday_themes", d.holiday_themes, t, err)) return false;
+    JsonObjectConst s = o["schedule"];
+    if (!s.isNull()) {
+      if (!getBool(s, "enabled", d.schedule.enabled, t, err)) return false;
+      if (!getBool(s, "follow_sun", d.schedule.follow_sun, t, err)) return false;
+      if (!getNum(s, "sun_offset_min", d.schedule.sun_offset_min, t, err, -180, 180)) return false;
+      if (!getHHMM(s, "day_start", d.schedule.day_start, t, err)) return false;
+      if (!getNum(s, "day_level", d.schedule.day_level, t, err, 1, 255)) return false;
+      if (!getHHMM(s, "night_start", d.schedule.night_start, t, err)) return false;
+      if (!getNum(s, "night_level", d.schedule.night_level, t, err, 1, 255)) return false;
+    }
+    JsonObjectConst nm = o["night_mode"];
+    if (!nm.isNull()) {
+      if (!getBool(nm, "enabled", d.night.enabled, t, err)) return false;
+      if (!getHHMM(nm, "start", d.night.start, t, err)) return false;
+      if (!getHHMM(nm, "end", d.night.end, t, err)) return false;
+      if (!getNum(nm, "level", d.night.level, t, err, 1, 255)) return false;
+      if (!getBool(nm, "hide_bottom", d.night.hide_bottom, t, err)) return false;
+    }
+    JsonObjectConst col = o["colors"];
+    if (!col.isNull()) {
+      if (!getColor(col, "time", d.colors.time, t, err)) return false;
+      if (!getColor(col, "date", d.colors.date, t, err)) return false;
+      if (!getColor(col, "temp", d.colors.temp, t, err)) return false;
+      if (!getColor(col, "text", d.colors.text, t, err)) return false;
+      if (!getColor(col, "hi", d.colors.hi, t, err)) return false;
+      if (!getColor(col, "lo", d.colors.lo, t, err)) return false;
+    }
+    if (t) changed |= CHG_DISPLAY;
+  }
+
+  o = src["panel"];
+  if (!o.isNull()) {
+    t = false;
+    PanelConfig& p = c.panel;
+    if (!getNum(o, "width", p.width, t, err, 32, 128)) return false;
+    if (!getNum(o, "height", p.height, t, err, 16, 64)) return false;
+    if (!getNum(o, "chain", p.chain, t, err, 1, 4)) return false;
+    JsonVariantConst dr = o["driver"];
+    if (!dr.isNull()) {
+      if (!panel_driver_parse(dr.as<const char*>(), p.driver)) { err = "driver: unknown driver name"; return false; }
+      t = true;
+    }
+    if (!getBool(o, "clkphase", p.clkphase, t, err)) return false;
+    if (!getNum(o, "latch_blanking", p.latch_blanking, t, err, 1, 4)) return false;
+    if (!getNum(o, "i2s_speed_hz", p.i2s_speed_hz, t, err, 1000000, 20000000)) return false;
+    if (!getNum(o, "min_refresh_hz", p.min_refresh_hz, t, err, 30, 250)) return false;
+    if (!getNum(o, "max_brightness", p.max_brightness, t, err, 1, 255)) return false;
+    if (!getNum(o, "color_depth_bits", p.color_depth_bits, t, err, 4, 8)) return false;
+    if (!getBool(o, "double_buffer", p.double_buffer, t, err)) return false;
+    if (!getBool(o, "swap_rb", p.swap_rb, t, err)) return false;
+    if (t) changed |= CHG_PANEL;
+  }
+
+  o = src["audio"];
+  if (!o.isNull()) {
+    t = false;
+    AudioConfig& a = c.audio;
+    if (!getBool(o, "enabled", a.enabled, t, err)) return false;
+    if (!getNum(o, "volume", a.volume, t, err, 0, 100)) return false;
+    JsonVariantConst ch = o["chime"];
+    if (!ch.isNull()) {
+      if (!chime_parse(ch.as<const char*>(), a.chime)) { err = "chime: unknown style"; return false; }
+      t = true;
+    }
+    if (!getNum(o, "repeat_min", a.repeat_min, t, err, 0, 120)) return false;
+    JsonObjectConst q = o["quiet"];
+    if (!q.isNull()) {
+      if (!getBool(q, "enabled", a.quiet.enabled, t, err)) return false;
+      if (!getHHMM(q, "start", a.quiet.start, t, err)) return false;
+      if (!getHHMM(q, "end", a.quiet.end, t, err)) return false;
+    }
+    if (t) changed |= CHG_AUDIO;
+  }
+
+  o = src["lightning"];
+  if (!o.isNull()) {
+    t = false;
+    LightningConfig& l = c.lightning;
+    if (!getBool(o, "enabled", l.enabled, t, err)) return false;
+    if (!getStr(o, "server", l.server, t, err, false)) return false;
+    if (!getNum(o, "port", l.port, t, err, 1, 65535)) return false;
+    if (!getNum(o, "radius_km", l.radius_km, t, err, 5, 300)) return false;
+    if (!getNum(o, "window_min", l.window_min, t, err, 1, 120)) return false;
+    if (!getBool(o, "chime", l.chime, t, err)) return false;
+    if (!getBool(o, "show_bolt", l.show_bolt, t, err)) return false;
+    if (t) changed |= CHG_LIGHTNING;
+  }
+
+  o = src["pushbullet"];
+  if (!o.isNull()) {
+    t = false;
+    PushbulletConfig& pb = c.pushbullet;
+    JsonVariantConst tk = o["token"];
+    if (tk.is<const char*>() && strcmp(tk.as<const char*>(), "***") != 0) {
+      if (!getStr(o, "token", pb.token, t, err)) return false;
+      pb.device_iden[0] = '\0';   // new account: register again
+    }
+    if (!getStr(o, "device_iden", pb.device_iden, t, err)) return false;
+    if (!getBool(o, "notify_alerts", pb.notify_alerts, t, err)) return false;
+    if (!getSeverity(o, "notify_min_severity", pb.notify_min_severity, t, err)) return false;
+    if (!getBool(o, "notify_lightning", pb.notify_lightning, t, err)) return false;
+    if (!getBool(o, "notify_alarms", pb.notify_alarms, t, err)) return false;
+    if (!getBool(o, "show_pushes", pb.show_pushes, t, err)) return false;
+    if (!getNum(o, "poll_sec", pb.poll_sec, t, err, 15, 3600)) return false;
+    if (!getNum(o, "show_sec", pb.show_sec, t, err, 0, 3600)) return false;
+    if (!getBool(o, "chime", pb.chime, t, err)) return false;
+    if (t) changed |= CHG_PUSHBULLET;
+  }
+
+  JsonVariantConst al = src["alarms"];
+  if (!al.isNull()) {
+    if (!al.is<JsonArrayConst>()) { err = "alarms: expected an array"; return false; }
+    uint8_t i = 0;
+    for (JsonObjectConst a : al.as<JsonArrayConst>()) {
+      if (i >= MAX_ALARMS) break;
+      AlarmConfig& x = c.alarms.items[i];
+      bool tt = false;
+      if (!getBool(a, "enabled", x.enabled, tt, err)) return false;
+      if (!getHHMM(a, "time", x.minute, tt, err)) return false;
+      JsonVariantConst dv = a["days"];
+      if (dv.is<const char*>()) {
+        const char* ds = dv.as<const char*>();
+        if (strlen(ds) != 7) { err = "alarms.days: expected 7 characters (Mon..Sun, 0/1)"; return false; }
+        uint8_t m = 0;
+        for (int k = 0; k < 7; k++) if (ds[k] == '1') m |= (1 << k);
+        x.days = m;
+      }
+      JsonVariantConst ch = a["chime"];
+      if (!ch.isNull() && !chime_parse(ch.as<const char*>(), x.chime)) { err = "alarms.chime: unknown style"; return false; }
+      if (!getStr(a, "label", x.label, tt, err)) return false;
+      i++;
+    }
+    changed |= CHG_ALARMS;
+  }
+
+  JsonVariantConst fb = src["first_boot"];
+  if (fb.is<bool>()) c.first_boot = fb.as<bool>();
+  return true;
+}
+
+void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
+  dst["version"] = 1;
+  JsonObject o = dst["wifi"].to<JsonObject>();
+  o["ssid"] = c.wifi.ssid;
+  o["pass"] = mask_secrets ? (c.wifi.pass[0] ? "***" : "") : c.wifi.pass;
+  o["hostname"] = c.wifi.hostname;
+  o["ap_pass"] = mask_secrets ? (c.wifi.ap_pass[0] ? "***" : "") : c.wifi.ap_pass;
+  o["tx_power"] = c.wifi.tx_power;
+
+  o = dst["location"].to<JsonObject>();
+  o["lat"] = c.location.lat;
+  o["lon"] = c.location.lon;
+  o["name"] = c.location.name;
+
+  o = dst["time"].to<JsonObject>();
+  o["tz_id"] = c.time.tz_id;
+  o["tz_posix"] = c.time.tz_posix;
+  o["ntp1"] = c.time.ntp1;
+  o["ntp2"] = c.time.ntp2;
+  o["use_24h"] = c.time.use_24h;
+  o["show_seconds"] = c.time.show_seconds;
+
+  o = dst["weather"].to<JsonObject>();
+  o["enabled"] = c.weather.enabled;
+  o["units"] = c.weather.imperial ? "imperial" : "metric";
+  o["refresh_min"] = c.weather.refresh_min;
+  o["forecast_days"] = c.weather.forecast_days;
+
+  o = dst["alerts"].to<JsonObject>();
+  o["enabled"] = c.alerts.enabled;
+  o["poll_sec"] = c.alerts.poll_sec;
+  o["user_agent_contact"] = c.alerts.user_agent_contact;
+  o["min_severity"] = severity_name(c.alerts.min_severity);
+  JsonArray ig = o["ignored_events"].to<JsonArray>();
+  {
+    char buf[sizeof(c.alerts.ignored_events)];
+    strlcpy(buf, c.alerts.ignored_events, sizeof(buf));
+    char* save = nullptr;
+    for (char* tok = strtok_r(buf, ",", &save); tok; tok = strtok_r(nullptr, ",", &save)) {
+      while (*tok == ' ') tok++;
+      if (*tok) ig.add(String(tok));
+    }
+  }
+  o["chime_min_severity"] = severity_name(c.alerts.chime_min_severity);
+  o["flash_frame_sec"] = c.alerts.flash_frame_sec;
+  o["banner_px_per_s"] = c.alerts.banner_px_per_s;
+  o["tls_verify"] = c.alerts.tls_verify;
+
+  o = dst["display"].to<JsonObject>();
+  const DisplayConfig& d = c.display;
+  o["brightness"] = d.brightness;
+  o["gamma"] = d.gamma;
+  o["page_sec"] = d.page_sec;
+  JsonArray pg = o["pages"].to<JsonArray>();
+  for (uint8_t i = 0; i < d.npages; i++) pg.add(page_name(d.pages[i]));
+  o["forecast_page"] = d.forecast_page;
+  o["forecast_every_n_cycles"] = d.forecast_every_n_cycles;
+  o["colon_blink"] = d.colon_blink;
+  o["ip_on_connect_sec"] = d.ip_on_connect_sec;
+  o["hourly_page"] = d.hourly_page;
+  o["transitions"] = d.transitions;
+  o["precip_fx"] = d.precip_fx;
+  o["holiday_themes"] = d.holiday_themes;
+  JsonObject s = o["schedule"].to<JsonObject>();
+  s["enabled"] = d.schedule.enabled;
+  s["follow_sun"] = d.schedule.follow_sun;
+  s["sun_offset_min"] = d.schedule.sun_offset_min;
+  putHHMM(s, "day_start", d.schedule.day_start);
+  s["day_level"] = d.schedule.day_level;
+  putHHMM(s, "night_start", d.schedule.night_start);
+  s["night_level"] = d.schedule.night_level;
+  JsonObject nm = o["night_mode"].to<JsonObject>();
+  nm["enabled"] = d.night.enabled;
+  putHHMM(nm, "start", d.night.start);
+  putHHMM(nm, "end", d.night.end);
+  nm["level"] = d.night.level;
+  nm["hide_bottom"] = d.night.hide_bottom;
+  JsonObject col = o["colors"].to<JsonObject>();
+  putColor(col, "time", d.colors.time);
+  putColor(col, "date", d.colors.date);
+  putColor(col, "temp", d.colors.temp);
+  putColor(col, "text", d.colors.text);
+  putColor(col, "hi", d.colors.hi);
+  putColor(col, "lo", d.colors.lo);
+
+  o = dst["panel"].to<JsonObject>();
+  const PanelConfig& p = c.panel;
+  o["width"] = p.width;
+  o["height"] = p.height;
+  o["chain"] = p.chain;
+  o["driver"] = panel_driver_name(p.driver);
+  o["clkphase"] = p.clkphase;
+  o["latch_blanking"] = p.latch_blanking;
+  o["i2s_speed_hz"] = p.i2s_speed_hz;
+  o["min_refresh_hz"] = p.min_refresh_hz;
+  o["max_brightness"] = p.max_brightness;
+  o["color_depth_bits"] = p.color_depth_bits;
+  o["double_buffer"] = p.double_buffer;
+  o["swap_rb"] = p.swap_rb;
+
+  o = dst["audio"].to<JsonObject>();
+  const AudioConfig& a = c.audio;
+  o["enabled"] = a.enabled;
+  o["volume"] = a.volume;
+  o["chime"] = chime_name(a.chime);
+  o["repeat_min"] = a.repeat_min;
+  JsonObject q = o["quiet"].to<JsonObject>();
+  q["enabled"] = a.quiet.enabled;
+  putHHMM(q, "start", a.quiet.start);
+  putHHMM(q, "end", a.quiet.end);
+
+  o = dst["lightning"].to<JsonObject>();
+  o["enabled"] = c.lightning.enabled;
+  o["server"] = c.lightning.server;
+  o["port"] = c.lightning.port;
+  o["radius_km"] = c.lightning.radius_km;
+  o["window_min"] = c.lightning.window_min;
+  o["chime"] = c.lightning.chime;
+  o["show_bolt"] = c.lightning.show_bolt;
+
+  o = dst["pushbullet"].to<JsonObject>();
+  o["token"] = mask_secrets ? (c.pushbullet.token[0] ? "***" : "") : c.pushbullet.token;
+  o["device_iden"] = c.pushbullet.device_iden;
+  o["notify_alerts"] = c.pushbullet.notify_alerts;
+  o["notify_min_severity"] = severity_name(c.pushbullet.notify_min_severity);
+  o["notify_lightning"] = c.pushbullet.notify_lightning;
+  o["notify_alarms"] = c.pushbullet.notify_alarms;
+  o["show_pushes"] = c.pushbullet.show_pushes;
+  o["poll_sec"] = c.pushbullet.poll_sec;
+  o["show_sec"] = c.pushbullet.show_sec;
+  o["chime"] = c.pushbullet.chime;
+
+  JsonArray al = dst["alarms"].to<JsonArray>();
+  for (uint8_t i = 0; i < MAX_ALARMS; i++) {
+    const AlarmConfig& x = c.alarms.items[i];
+    JsonObject a = al.add<JsonObject>();
+    a["enabled"] = x.enabled;
+    putHHMM(a, "time", x.minute);
+    char ds[8];
+    for (int k = 0; k < 7; k++) ds[k] = (x.days & (1 << k)) ? '1' : '0';
+    ds[7] = '\0';
+    a["days"] = ds;
+    a["chime"] = chime_name(x.chime);
+    a["label"] = x.label;
+  }
+
+  dst["first_boot"] = c.first_boot;
+}

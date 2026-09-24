@@ -1,0 +1,6 @@
+.pio/
+include/generated/
+.vscode/
+__pycache__/
+*.pyc
+dist/
