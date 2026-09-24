@@ -13,6 +13,9 @@ VH-4P screw terminal for panel power (5 V / 4 A max). Wiki: https://seengreat.co
 | HUB75 LAT / OE / CLK | 11 / 13 / 12 | I2C SDA / SCL | 1 / 2 |
 | SD card SPI MISO/CLK/MOSI/CS | 42/41/40/39 | BOOT button | 0 |
 
+Indoor sensor (optional): a BME280 / BMP280 / BME680 breakout on the I2C pins (3.3 V, GND, SDA = GPIO 1, SCL = GPIO 2),
+address 0x76 or 0x77, identified by the chip ID register (0x60 / 0x58 / 0x61). Sampled in forced mode every 10 s.
+
 I2C devices: PCF85063 RTC at 0x51, ES8311 codec at 0x18 or 0x19, PCA9557 IO expander (thumb-wheel switch) at
 one of 0x18-0x1F. The firmware probes the ES8311 chip ID (0xFD = 0x83, 0xFE = 0x11) to tell the two apart and
 logs the result at boot (`/api/log`).

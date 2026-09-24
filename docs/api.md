@@ -7,7 +7,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | GET | `/` | Web UI (gzip, ETag) |
 | GET | `/setup` | mobile setup wizard (WiFi, location, time zone, alert contact) |
 | GET | `/manifest.webmanifest`, `/sw.js`, `/icon-192.png`, `/icon-512.png`, `/apple-touch-icon.png` | web-app manifest, service worker and icons for "Add to Home Screen" |
-| GET | `/api/status` | time, weather summary, active alerts, WiFi, network fetch status, memory, panel, audio, speech (voice pack state), I2C map |
+| GET | `/api/status` | time, weather summary, active alerts, WiFi, network fetch status, memory, panel, audio, speech (voice pack state), indoor sensor (values, trends), I2C map |
 | GET | `/api/config` | full configuration (passwords masked as `***`) plus `tz_options` |
 | POST | `/api/config` | partial configuration merge; body is any subset of the config object. Returns `{ok, applied[], reboot_required[]}` or `{ok:false, error}` with HTTP 400 |
 | GET | `/api/weather` | last Open-Meteo result |
@@ -17,6 +17,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/test/chime` | `{style?, force}` plays a chime (`force` ignores quiet hours) |
 | POST | `/api/test/say` | `{text, force}` speaks a phrase from the voice pack ("Tornado Warning", "Lightning nearby", ...); 404 when the phrase is not in the pack, 409 without a pack or while another sound plays |
 | POST | `/api/voice/download` | fetch the manifest and (re)download the voice pack into LittleFS |
+| GET | `/api/indoor/history[?minutes=180&step=1]` | indoor sensor history, oldest first: `{sensor, step_min, age_min[], temp_c[], humidity[], pressure_hpa[]}` (up to 1440 minutes) |
 | GET | `/api/voice/phrases` | `{installed, voice, version, phrases[]}`: every phrase the installed pack contains |
 | POST | `/api/test/panel` | shows the test pattern; optional `sec=3..300` (default 10) |
 | POST | `/api/message` | `{text, seconds (0 = until cleared), color "#RRGGBB", chime, force}` scrolls a message |
@@ -57,14 +58,17 @@ Configuration keys and defaults:
   "pushbullet": { "token": "", "device_iden": "", "notify_alerts": true, "notify_min_severity": "Severe", "notify_lightning": true,
                   "notify_alarms": false, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
   "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixClock/manifest.json", "check_hours": 6 },
+  "indoor":   { "enabled": true, "auto_page": true, "sample_sec": 10, "temp_offset": 0, "humidity_offset": 0, "altitude_m": -1, "sea_level": true, "pressure_unit": "auto", "trend_min": 60, "pressure_trend_min": 180 },
   "lightning": { "enabled": false, "server": "blitzortung.ha.sed.pl", "port": 1883, "radius_km": 40, "window_min": 15, "chime": true, "show_bolt": true },
   "alarms":   [ { "enabled": false, "time": "07:00", "days": "1111100", "chime": "triple_beep", "label": "" }, "... up to 4" ] }
 ```
 
-Pages: `date`, `temp`, `cond`, `wind`, `hilo`, `feels`, `sun`. Alarm `days` is a 7-character string Monday..Sunday (`1` = on). Severities: `Unknown`, `Minor`, `Moderate`, `Severe`,
+Pages: `date`, `temp`, `cond`, `wind`, `hilo`, `feels`, `sun`, `indoor` (BME280/BME680 readings with trend arrows). Alarm `days` is a 7-character string Monday..Sunday (`1` = on). Severities: `Unknown`, `Minor`, `Moderate`, `Severe`,
 `Extreme`. Chimes: `none`, `two_tone`, `triple_beep`, `chirp`, `alarm_beeps`, `doorbell`, `arpeggio`, `sonar`, `sos`, `siren_hilo`, `siren_wail`,
 `siren_yelp`, `nws_1050`, `eas_attention`, `eas_full`. `audio.chime_extreme` is used for Extreme alerts, `audio.chime` for everything else. `audio.speech` controls the spoken announcements
 (the event name of a new alert, "Lightning nearby", "Alarm" / "Timer finished", demo scenario names; `repeat` 1..3); an alert event without
-a clip in the voice pack is announced as "Weather alert". Drivers: `SHIFTREG`, `FM6124`, `FM6126A`,
+a clip in the voice pack is announced as "Weather alert". `indoor.temp_offset` is in the display unit (F when `weather.units` is imperial); `indoor.altitude_m` -1 uses the
+elevation Open-Meteo reports; `pressure_unit` `auto` picks inHg with imperial units. Trend arrows in `/api/status.indoor` are `steady`, `rising`, `falling`,
+`rising fast`, `falling fast` (thresholds 0.5 C / 3 % over `trend_min`, 1 hPa over `pressure_trend_min`, fast = three times that). Drivers: `SHIFTREG`, `FM6124`, `FM6126A`,
 `ICN2038S`, `MBI5124`, `DP3246`. Sending `"tz_id"` without `"tz_posix"` fills the POSIX string from the built-in
 US zone table. `wifi.pass` / `wifi.ap_pass` set to `"***"` keep the stored secret.

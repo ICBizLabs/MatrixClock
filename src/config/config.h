@@ -7,7 +7,7 @@ enum class Severity : uint8_t { Unknown = 0, Minor, Moderate, Severe, Extreme };
 const char* severity_name(Severity s);
 bool        severity_parse(const char* s, Severity& out);
 
-enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_COUNT };
+enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HILO, PAGE_FEELS, PAGE_SUN, PAGE_INDOOR, PAGE_COUNT };
 const char* page_name(uint8_t id);
 bool        page_parse(const char* s, uint8_t& out);
 
@@ -183,6 +183,20 @@ struct UpdateConfig {             // self-update from the web installer's manife
   uint16_t check_hours = 6;
 };
 
+struct IndoorConfig {             // BME280 / BMP280 / BME680 on the I2C header (SDA 1, SCL 2)
+  bool enabled = true;
+  bool auto_page = true;          // add the "indoor" page to the rotation when a sensor is found
+  uint16_t sample_sec = 10;
+  float temp_offset = 0;          // calibration, in the display unit (F when imperial); the board runs warm
+  float humidity_offset = 0;      // % RH
+  float altitude_m = -1;          // for sea-level pressure; -1 = elevation reported by the weather service
+  bool sea_level = true;          // show pressure reduced to sea level when an altitude is known
+  uint8_t pressure_unit = 0;      // 0 = auto (inHg when imperial, else hPa), 1 = hPa, 2 = inHg
+  uint16_t trend_min = 60;        // window for the temperature / humidity trend arrows
+  uint16_t pressure_trend_min = 180;   // window for the pressure tendency (WMO uses 3 hours)
+  float temp_offset_c = 0;        // derived: temp_offset converted to C
+};
+
 struct AppConfig {
   WifiConfig wifi;
   LocationConfig location;
@@ -196,13 +210,14 @@ struct AppConfig {
   LightningConfig lightning;
   PushbulletConfig pushbullet;
   UpdateConfig update;
+  IndoorConfig indoor;
   bool first_boot = true;
 };
 
 // Bit flags telling which sections a JSON merge touched (used to apply changes live / ask for a reboot)
 enum : uint16_t {
   CHG_WIFI = 1, CHG_LOCATION = 2, CHG_TIME = 4, CHG_WEATHER = 8,
-  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048
+  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096
 };
 
 extern AppConfig g_cfg;

@@ -32,6 +32,7 @@ struct WeatherData {
   uint8_t nhourly = 0;
   int16_t sunrise_min = -1;  // today's sunrise / sunset as minute of local day, -1 = unknown
   int16_t sunset_min = -1;
+  float elevation_m = -9999;  // grid-cell elevation reported by Open-Meteo, -9999 = unknown (used for sea-level pressure)
 };
 struct NetStatus {
   uint32_t last_wx_ok = 0, last_wx_err = 0, last_al_ok = 0, last_al_err = 0;   // millis(), 0 = never

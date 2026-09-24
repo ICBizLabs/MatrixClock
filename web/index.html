@@ -51,6 +51,9 @@ progress{width:100%;height:10px}
  <div class="card"><h2>Live view</h2><canvas id="pv" width="512" height="256" style="width:100%;max-width:512px;background:#000;border-radius:6px;image-rendering:pixelated"></canvas>
   <div class="row"><label class="chk"><input type="checkbox" id="pvlive" checked>Auto refresh</label><span class="msg" id="msg-pv"></span></div></div>
  <div class="card"><h2>Now</h2><table id="st-now"></table></div>
+ <div class="card" id="indoor-card" hidden><h2>Indoor</h2><table id="st-indoor"></table>
+  <canvas id="inchart" width="900" height="220" style="width:100%;max-width:900px;background:#0b0e14;border-radius:6px;margin-top:8px"></canvas>
+  <p class="msg" id="inchart-note">Last 3 hours, one point per minute. Arrows compare with the reading one hour ago (temperature, humidity) and three hours ago (pressure, scaled while the history is shorter).</p></div>
  <div class="card"><h2>Demo mode</h2><div class="row"><label class="chk"><input type="checkbox" id="demo" onchange="setDemo(this.checked)">Cycle through demo screens</label>
   for <input id="demomin" type="number" min="1" max="720" value="10" style="width:80px"> minutes
   <label class="chk"><input type="checkbox" id="demosound" onchange="if($('#demo').checked)setDemo(true)">with sounds</label><span class="msg" id="msg-demo"></span></div>
@@ -115,6 +118,19 @@ progress{width:100%;height:10px}
  <div class="row"><button class="btn" onclick="save('weather')">Save</button>
   <button class="btn sec" onclick="post('/api/test/alert',{event:'Tornado Warning',severity:'Extreme',headline:'Test tornado warning until 5 PM',minutes:3})">Inject test alert (3 min)</button>
   <span class="msg" id="msg-weather"></span></div></div>
+ <div class="card"><h2>Indoor sensor (BME280 / BMP280 / BME680 on the I2C header)</h2><div class="grid">
+  <label class="chk"><input data-k="indoor.enabled" type="checkbox">Enabled (auto-detected at 0x76 / 0x77)</label>
+  <label class="chk"><input data-k="indoor.auto_page" type="checkbox">Add the "indoor" page automatically when a sensor is found</label>
+  <label>Temperature offset (° in your units, e.g. -2 if the board warms the sensor)<input data-k="indoor.temp_offset" type="number" step="0.1" min="-30" max="30"></label>
+  <label>Humidity offset (%)<input data-k="indoor.humidity_offset" type="number" step="0.5" min="-50" max="50"></label>
+  <label>Altitude (m) for sea-level pressure, -1 = from the weather service<input data-k="indoor.altitude_m" type="number" step="1" min="-1" max="9000"></label>
+  <label class="chk"><input data-k="indoor.sea_level" type="checkbox">Show sea-level pressure (what forecasts quote)</label>
+  <label>Pressure unit<select data-k="indoor.pressure_unit"><option value="auto">Automatic (inHg with °F, hPa with °C)</option><option value="hpa">hPa</option><option value="inhg">inHg</option></select></label>
+  <label>Temperature / humidity trend window (minutes)<input data-k="indoor.trend_min" type="number" min="10" max="1440"></label>
+  <label>Pressure trend window (minutes)<input data-k="indoor.pressure_trend_min" type="number" min="30" max="1440"></label>
+  <label>Read every (seconds)<input data-k="indoor.sample_sec" type="number" min="2" max="600"></label>
+ </div><div class="row"><button class="btn" onclick="save('weather')">Save</button><span class="msg" id="msg-indoor"></span></div>
+ <p class="msg">Wire 3.3 V, GND, SDA (GPIO 1) and SCL (GPIO 2). Keep the sensor a few inches from the panel and the controller, or set a temperature offset. Trend arrows: up / down when the change over the window exceeds 0.5 °C, 3 % or 1 hPa; a double arrow means three times that.</p></div>
 </section>
 
 <section id="display">
@@ -135,7 +151,7 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="display.night_mode.hide_bottom" type="checkbox">Hide weather at night</label>
  </div></div>
  <div class="card"><h2>Pages</h2><div class="grid">
-  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun)<input data-k="display.pages" data-list="1"></label>
+  <label>Pages (order, comma separated: date, temp, cond, wind, hilo, feels, sun, indoor)<input data-k="display.pages" data-list="1"></label>
   <label>Seconds per page<input data-k="display.page_sec" type="number" min="2" max="60"></label>
   <label class="chk"><input data-k="display.forecast_page" type="checkbox">Show 3-day forecast screen</label>
   <label>Forecast every N page cycles<input data-k="display.forecast_every_n_cycles" type="number" min="1" max="20"></label>
@@ -324,6 +340,28 @@ async function preview(){if(pvBusy||!$('#pvlive').checked||!$('#status').classLi
  const [w,h]=(r.headers.get('X-Frame-Size')||'64x32').split('x').map(Number);const cv=$('#pv');cv.width=w*8;cv.height=h*8;const g=cv.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,cv.width,cv.height);
  for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*2;const v=b[i]|(b[i+1]<<8);if(!v)continue;const R=((v>>11)&31)*255/31,G=((v>>5)&63)*255/63,B=(v&31)*255/31;g.fillStyle='rgb('+R+','+G+','+B+')';g.beginPath();g.arc(x*8+4,y*8+4,3.2,0,6.283);g.fill();}
  }catch(e){}pvBusy=false;}
+const ARROW={'rising fast':'<span class="ok">&#x21C8;</span>','rising':'<span class="ok">&#x2191;</span>','falling':'<span class="warn">&#x2193;</span>','falling fast':'<span class="warn">&#x21CA;</span>','steady':'<span style="opacity:.6">&#x2192;</span>'};
+let inchartAt=0;
+function indoorStatus(I){const card=$('#indoor-card');if(!card)return;const show=I&&(I.present||I.valid);card.hidden=!show;if(!show)return;const t=$('#st-indoor');t.innerHTML='';
+ const u=cfg&&cfg.weather&&cfg.weather.units==='imperial';const pu=cfg&&cfg.indoor?cfg.indoor.pressure_unit:'auto';const inhg=pu==='inhg'||(pu==='auto'&&u);
+ row(t,'Sensor',I.sensor+' at 0x'+(I.address||0).toString(16)+(I.errors?' <span class="warn">('+I.errors+' read errors)</span>':''));
+ if(!I.valid){row(t,'Reading','<span class="warn">waiting for the first sample</span>');return;}
+ const dT=u?I.d_temp_c*9/5:I.d_temp_c;
+ row(t,'Temperature',(u?I.temp_f:I.temp_c)+'°'+(u?'F':'C')+' '+ARROW[I.trend_temp]+' <small>'+I.trend_temp+(I.span_min?' ('+(dT>0?'+':'')+dT.toFixed(1)+'° in '+(cfg?cfg.indoor.trend_min:60)+' min)':'')+'</small>');
+ if(I.has_humidity)row(t,'Humidity',I.humidity+'% '+ARROW[I.trend_humidity]+' <small>'+I.trend_humidity+(I.span_min?' ('+(I.d_humidity>0?'+':'')+I.d_humidity+'% in '+(cfg?cfg.indoor.trend_min:60)+' min)':'')+'</small>');
+ const sl=cfg&&cfg.indoor&&cfg.indoor.sea_level&&I.sea_level_known;const hpa=sl?I.sea_level_hpa:I.pressure_hpa;const pv=inhg?(hpa*0.02953).toFixed(2)+' inHg':hpa+' hPa';
+ const dP=inhg?(I.d_pressure_hpa*0.02953).toFixed(2)+' inHg':I.d_pressure_hpa+' hPa';
+ row(t,'Pressure',pv+(sl?' <small>(sea level, altitude '+I.altitude_m+' m)</small>':' <small>(station)</small>')+' '+ARROW[I.trend_pressure]+' <small>'+I.trend_pressure+(I.span_min?' ('+(I.d_pressure_hpa>0?'+':'')+dP+' per '+(cfg?cfg.indoor.pressure_trend_min:180)+' min)':'')+'</small>');
+ row(t,'Sampled',I.age_s+' s ago, '+I.span_min+' min of history');
+ if(Date.now()-inchartAt>60000){inchartAt=Date.now();drawIndoorChart(u,inhg);}}
+async function drawIndoorChart(u,inhg){try{const r=await fetch('/api/indoor/history?minutes=180');const j=await r.json();const cv=$('#inchart');const g=cv.getContext('2d');const W=cv.width,H=cv.height;g.fillStyle='#0b0e14';g.fillRect(0,0,W,H);
+ const n=j.age_min.length;if(n<2){g.fillStyle='#8a94a6';g.font='16px system-ui';g.fillText('history builds up one point per minute',16,H/2);return;}
+ const series=[{v:j.temp_c.map(x=>u?x*9/5+32:x),c:'#ffd060',l:'temp °'+(u?'F':'C'),d:1},{v:j.humidity,c:'#60a0ff',l:'humidity %',d:0},{v:j.pressure_hpa.map(x=>inhg?x*0.02953:x),c:'#7ae582',l:'pressure '+(inhg?'inHg':'hPa'),d:inhg?2:1}];
+ const L=64,R=16,T=18,B=22,cw=W-L-R,ch=H-T-B;g.strokeStyle='#1e2430';g.lineWidth=1;for(let i=0;i<=4;i++){const y=T+ch*i/4;g.beginPath();g.moveTo(L,y);g.lineTo(W-R,y);g.stroke();}
+ let lx=L+8;series.forEach((s,k)=>{let lo=Math.min(...s.v),hi=Math.max(...s.v);const span=k==2?(inhg?0.06:2):2;if(hi-lo<span)hi=lo+span;const pad=(hi-lo)*0.1;lo-=pad;hi+=pad;
+  g.strokeStyle=s.c;g.lineWidth=2;g.beginPath();s.v.forEach((v,i)=>{const x=L+cw*i/(n-1),y=T+ch*(1-(v-lo)/(hi-lo));i?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();
+  g.fillStyle=s.c;g.font='13px system-ui';const lab=s.l+' '+s.v[n-1].toFixed(s.d)+' (min '+Math.min(...s.v).toFixed(s.d)+', max '+Math.max(...s.v).toFixed(s.d)+')';g.fillText(lab,lx,14);lx+=g.measureText(lab).width+22;});
+ g.fillStyle='#8a94a6';g.font='12px system-ui';g.fillText('-'+j.age_min[0]+' min',L,H-6);g.fillText('now',W-R-28,H-6);}catch(e){}}
 let phrasesLoaded=false;
 function voiceStatus(V){const t=$('#st-voice');if(!t)return;t.innerHTML='';
  row(t,'Voice pack',V.installed?(V.voice||'voice')+' v'+V.version+', '+V.clips+' phrases':'<span class="warn">not downloaded'+(V.available?' (v'+V.available+' available)':'')+'</span>');
@@ -346,7 +384,7 @@ async function status(){try{const r=await fetch('/api/status');const s=await r.j
  const D=s.demo||{};if(document.activeElement!==$('#demo'))$('#demo').checked=!!D.on;say('demo',D.on?'showing: '+D.scenario+' · '+Math.ceil(D.remaining_s/60)+' min left':'','ok');
  row(y,'Forecast / hourly screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
  row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
- row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
+ row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});indoorStatus(s.indoor);row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
  const U=s.update||{};const ut=$('#st-update');if(ut){ut.innerHTML='';row(ut,'Installed','v'+U.current);row(ut,'Latest',U.latest?'v'+U.latest+(U.state==='available'?' <span class="warn">new version available</span>':U.state==='up-to-date'?' <span class="ok">up to date</span>':''):'not checked yet');
   row(ut,'Status',U.state+(U.state==='downloading'?' '+U.progress+'%':'')+(U.error?' <span class="bad">'+U.error+'</span>':'')+(U.last_check_age_s>=0?' · checked '+ago(U.last_check_age_s):''));$('#installbtn').disabled=U.state!=='available';}
  if(U.state==='available')row(y,'Update','<span class="warn">v'+U.latest+' available</span> (Update tab)');

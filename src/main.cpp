@@ -10,6 +10,7 @@
 #include "util/log.h"
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
+#include "io/env_sensor.h"
 #include "config/config.h"
 #include "display/panel.h"
 #include "display/canvas.h"
@@ -104,6 +105,13 @@ void setup() {
   voice::begin(g_cfg.audio);
   voice_pack::begin();
   buttons::begin(onButton);
+  env_sensor::begin(g_cfg.indoor);
+  if (env_sensor::present() && g_cfg.indoor.auto_page) {
+    // put the indoor page into the rotation (in RAM; saving the Display tab keeps it)
+    bool has = false;
+    for (uint8_t i = 0; i < g_cfg.display.npages; i++) if (g_cfg.display.pages[i] == PAGE_INDOOR) has = true;
+    if (!has && g_cfg.display.npages < PAGE_COUNT) g_cfg.display.pages[g_cfg.display.npages++] = PAGE_INDOOR;
+  }
   lightning::begin();
   LOGI("setup done, heap %lu", (unsigned long)ESP.getFreeHeap());
 }
@@ -113,6 +121,7 @@ void loop() {
   wifi_mgr::loop();
   timesvc::loop();
   buttons::loop();
+  env_sensor::loop(now);
   app::loop();
   if (!bootConfirmed && now > BOOT_OK_AFTER_MS) { bootConfirmed = true; g_bootAttempts = 0; }
   if (wifi_mgr::consumeConnectedEvent()) {
@@ -124,6 +133,7 @@ void loop() {
   if (now - lastSecond >= 1000) {
     lastSecond = now;
     alerts::expire(time(nullptr));
+    if (env_sensor::present()) { WeatherData w; if (shared::getWeather(w) && w.elevation_m > -9000) env_sensor::setAltitudeHint(w.elevation_m); }
     Severity fired;
     char firedEvent[48];
     if (alerts::takeNewForChime(g_cfg.alerts, g_cfg.audio.repeat_min, now, &fired, firedEvent, sizeof(firedEvent)))

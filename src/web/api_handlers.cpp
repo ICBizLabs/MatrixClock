@@ -18,6 +18,7 @@
 #include "net/voice_pack.h"
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
+#include "io/env_sensor.h"
 #include "time/time_service.h"
 #include "time/tz_table.h"
 #include "alarm/alarm.h"
@@ -160,6 +161,33 @@ namespace web {
       sp["progress"] = vps.progress;
       sp["available"] = vps.available_version;
       sp["error"] = vps.err;
+      {
+        env_sensor::Reading er = env_sensor::reading();
+        JsonObject in = root["indoor"].to<JsonObject>();
+        in["present"] = env_sensor::present();
+        in["sensor"] = env_sensor::typeName();
+        in["address"] = env_sensor::address();
+        in["valid"] = er.valid;
+        if (er.valid) {
+          in["temp_c"] = serialized(String(er.temp_c, 1));
+          in["temp_f"] = serialized(String(er.temp_c * 9.0f / 5.0f + 32.0f, 1));
+          in["has_humidity"] = er.has_humidity;
+          in["humidity"] = serialized(String(er.humidity, 1));
+          in["pressure_hpa"] = serialized(String(er.pressure_hpa, 1));
+          in["sea_level_hpa"] = serialized(String(er.sea_level_hpa, 1));
+          in["sea_level_known"] = er.sea_level_known;
+          in["altitude_m"] = serialized(String(er.altitude_m, 0));
+          in["trend_temp"] = env_sensor::trendName(er.t_temp);
+          in["trend_humidity"] = env_sensor::trendName(er.t_hum);
+          in["trend_pressure"] = env_sensor::trendName(er.t_press);
+          in["d_temp_c"] = serialized(String(er.d_temp, 2));
+          in["d_humidity"] = serialized(String(er.d_hum, 1));
+          in["d_pressure_hpa"] = serialized(String(er.d_press, 2));
+          in["span_min"] = er.span_min;
+          in["age_s"] = (millis() - er.sample_ms) / 1000;
+        }
+        in["errors"] = env_sensor::errors();
+      }
       const i2c_bus::Map& m = i2c_bus::map();
       JsonObject i2c = root["i2c"].to<JsonObject>();
       i2c["es8311"] = m.es8311; i2c["pca9557"] = m.pca9557; i2c["rtc"] = m.rtc;
@@ -211,7 +239,7 @@ namespace web {
       JsonArray reboot = root["reboot_required"].to<JsonArray>();
       struct { uint16_t bit; const char* name; bool reboot; } sections[] = {
         { CHG_WIFI, "wifi", false }, { CHG_LOCATION, "location", false }, { CHG_TIME, "time", false }, { CHG_WEATHER, "weather", false },
-        { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false },
+        { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false },
         { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false } };
       for (auto& s : sections) if (changed & s.bit) (s.reboot ? reboot : applied).add(s.name);
       res->setLength();
@@ -354,6 +382,28 @@ namespace web {
     server.on("/api/update/check", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestCheck(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/update/install", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestInstall(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/voice/download", HTTP_POST, [](AsyncWebServerRequest* r) { voice_pack::requestDownload(); r->send(200, "application/json", "{\"ok\":true}"); });
+    server.on("/api/indoor/history", HTTP_GET, [](AsyncWebServerRequest* r) {
+      long minutes = r->hasParam("minutes") ? r->getParam("minutes")->value().toInt() : 180;
+      long step = r->hasParam("step") ? r->getParam("step")->value().toInt() : 0;
+      minutes = constrain(minutes, 10L, 1440L);
+      if (step <= 0) step = minutes <= 180 ? 1 : (minutes <= 720 ? 5 : 10);
+      step = constrain(step, 1L, 60L);
+      static env_sensor::HistoryPoint pts[1440];
+      size_t n = env_sensor::history(pts, minutes / step + 1, (uint16_t)minutes, (uint16_t)step);
+      auto* res = new AsyncJsonResponse(false);
+      JsonObject root = res->getRoot();
+      root["sensor"] = env_sensor::typeName();
+      root["step_min"] = step;
+      JsonArray age = root["age_min"].to<JsonArray>(), t = root["temp_c"].to<JsonArray>(), h = root["humidity"].to<JsonArray>(), pr = root["pressure_hpa"].to<JsonArray>();
+      for (size_t i = 0; i < n; i++) {
+        age.add(pts[i].age_min);
+        t.add(serialized(String(pts[i].temp_c, 2)));
+        h.add(serialized(String(pts[i].humidity, 1)));
+        pr.add(serialized(String(pts[i].pressure_hpa, 2)));
+      }
+      res->setLength();
+      r->send(res);
+    });
     server.on("/api/voice/phrases", HTTP_GET, [](AsyncWebServerRequest* r) {
       auto* res = new AsyncJsonResponse(false);
       JsonObject root = res->getRoot();

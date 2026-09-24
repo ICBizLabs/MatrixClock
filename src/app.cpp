@@ -5,6 +5,7 @@
 #include "display/panel.h"
 #include "audio/audio_out.h"
 #include "audio/voice.h"
+#include "io/env_sensor.h"
 #include "net/wifi_manager.h"
 #include "net/net_task.h"
 #include "net/lightning.h"
@@ -26,6 +27,7 @@ namespace app {
       if (fl & CHG_TIME) timesvc::applyTz(g_cfg.time);
       if (fl & CHG_DISPLAY) { panel::setGamma(g_cfg.display.gamma); renderer::applyDisplay(); }
       if (fl & CHG_AUDIO) { audio_out::apply(g_cfg.audio); voice::apply(g_cfg.audio); }
+      if (fl & (CHG_INDOOR | CHG_WEATHER)) env_sensor::apply(g_cfg.indoor);
       if (fl & (CHG_WEATHER | CHG_LOCATION)) net_task::kick(net_task::JOB_WEATHER);
       if (fl & (CHG_ALERTS | CHG_LOCATION)) net_task::kick(net_task::JOB_ALERTS);
       if (fl & CHG_WIFI) wifi_mgr::applyCredentials(g_cfg.wifi);

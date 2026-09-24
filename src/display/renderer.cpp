@@ -15,6 +15,7 @@
 #include "net/alert_store.h"
 #include "net/wifi_manager.h"
 #include "net/lightning.h"
+#include "io/env_sensor.h"
 #include "time/time_service.h"
 #include "alarm/alarm.h"
 #include "util/timeutil.h"
@@ -65,6 +66,8 @@ namespace renderer {
       bool sound = false, soundPending = false;
       uint8_t soundStyle = 0;
       const char* soundPhrase = nullptr;
+      bool indoorSet = false;
+      env_sensor::Reading indoor;
       uint32_t timerEnd = 0, lastRing = 0;
       uint8_t page = 255;          // 255 = rotate normally
       Screen screen = Screen::Composite;
@@ -229,8 +232,55 @@ namespace renderer {
       else snprintf(l2, sizeof(l2), "%d%s %s %ldM", (int)lroundf(d), wx.imperial || !wx.valid ? "MI" : "KM", lightning::bearingName(ls.latest_bearing), ago / 60);
       pc.drawTextCentered(l2, W / 2, Y_L2, colText());
     }
+    constexpr uint16_t C_RISE = 0x3FE6, C_FALL = 0xFB00;      // trend arrows: soft green up, orange-red down
+    // 3x5 arrow (double chevron when the change is fast); a grey dash when steady
+    void drawTrend(Canvas& pc, int16_t x, int16_t y, env_sensor::Trend t) {
+      if (t == env_sensor::Trend::Steady) { pc.drawFastHLine(x, y + 3, 3, C_GREY); return; }
+      const bool up = (int8_t)t > 0, fast = (int8_t)t == 2 || (int8_t)t == -2;
+      const uint16_t col = up ? C_RISE : C_FALL;
+      auto head = [&](int16_t ty) { if (up) { pc.drawPixel(x + 1, ty, col); pc.drawFastHLine(x, ty + 1, 3, col); } else { pc.drawFastHLine(x, ty, 3, col); pc.drawPixel(x + 1, ty + 1, col); } };
+      if (fast) { head(y + 1); head(y + 4); }
+      else { head(y + 1); pc.drawFastVLine(x + 1, up ? y + 3 : y, 3, col); }
+    }
+    void drawHouseIcon(Canvas& pc, int16_t x, int16_t y) {
+      const uint16_t roof = Canvas::rgb(0xE06030), wall = Canvas::rgb(0xF0D8A0), door = Canvas::rgb(0x6A3A1A), win = Canvas::rgb(0x80D0FF);
+      for (int16_t i = 0; i < 7; i++) pc.drawFastHLine(x + 7 - i, y + 1 + i, 1 + 2 * i, roof);   // roof: rows 1..7
+      pc.fillRect(x + 3, y + 8, 10, 7, wall);                                                    // body: rows 8..14
+      pc.fillRect(x + 7, y + 10, 2, 5, door);
+      pc.fillRect(x + 4, y + 9, 2, 2, win); pc.fillRect(x + 10, y + 9, 2, 2, win);
+      pc.drawFastHLine(x + 2, y + 15, 12, C_GREY);                                              // ground
+    }
+    void drawIndoorPage(Canvas& pc, const env_sensor::Reading& r) {
+      classicFont(pc);
+      if (!r.valid) { pc.drawTextCentered(env_sensor::present() ? "READING.." : "NO SENSOR", W / 2, Y_SINGLE, C_GREY); return; }
+      const bool imperial = g_cfg.weather.imperial;
+      const uint16_t cTemp = Canvas::rgb(g_cfg.display.colors.temp), cText = colText();
+      drawHouseIcon(pc, ICON_X, 0);
+      char b[16];
+      int16_t x = TEXT_X;
+      snprintf(b, sizeof(b), "%d\xF8", (int)lroundf(imperial ? r.temp_c * 9.0f / 5.0f + 32.0f : r.temp_c));
+      pc.drawText(b, x, Y_L1, cTemp);
+      x += pc.textWidth(b);
+      drawTrend(pc, x, Y_L1 + 1, r.t_temp);
+      x += 5;
+      if (r.has_humidity) {
+        snprintf(b, sizeof(b), "%d%%", (int)lroundf(r.humidity));
+        pc.drawText(b, x, Y_L1, cText);
+        x += pc.textWidth(b);
+        drawTrend(pc, x, Y_L1 + 1, r.t_hum);
+      } else pc.drawText("IN", x, Y_L1, cText);
+      const float hpa = (g_cfg.indoor.sea_level && r.sea_level_known) ? r.sea_level_hpa : r.pressure_hpa;
+      const bool inhg = g_cfg.indoor.pressure_unit == 2 || (g_cfg.indoor.pressure_unit == 0 && imperial);
+      if (inhg) snprintf(b, sizeof(b), "%.2fIN", hpa * 0.02953f);
+      else snprintf(b, sizeof(b), "%dHPA", (int)lroundf(hpa));
+      x = TEXT_X;
+      pc.drawText(b, x, Y_L2, cText);
+      x += pc.textWidth(b);
+      drawTrend(pc, x, Y_L2 + 1, r.t_press);
+    }
     void drawPage(Canvas& pc, uint8_t id, const struct tm& lt, bool timeValid, uint32_t now) {
       classicFont(pc);
+      if (id == PAGE_INDOOR) { drawIndoorPage(pc, demo.on && demo.indoorSet ? demo.indoor : env_sensor::reading()); return; }
       const uint16_t cText = colText(), cTemp = Canvas::rgb(g_cfg.display.colors.temp), cDate = colDate();
       char l1[32], l2[32];
       if (id == PAGE_DATE) {
@@ -353,11 +403,11 @@ namespace renderer {
       demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
       demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
     }
-    constexpr uint8_t DEMO_COUNT = 22;
+    constexpr uint8_t DEMO_COUNT = 23;
     void demoApply(uint8_t i, uint32_t now) {
       demo.idx = i;
       demo.av = AlertView(); demo.ls = lightning::Status(); demo.theme = nullptr;
-      demo.night = demo.ringing = demo.ringTimer = demo.timer = demo.lightningPage = false;
+      demo.night = demo.ringing = demo.ringTimer = demo.timer = demo.lightningPage = demo.indoorSet = false;
       demo.page = 255; demo.screen = Screen::Composite;
       demo.wx = demoWeather(0, true, 72, 70, 46, 12, 19, 315);
       clearMessage();
@@ -388,6 +438,11 @@ namespace renderer {
         case 19: demo.name = "valentine";  demo.theme = themes::forDate(themes::sample(themes::Sample::Valentine)); demo.page = PAGE_TEMP; break;
         case 20: demo.name = "halloween";  demo.wx = demoWeather(2, false, 52, 49, 60, 5, 9, 90); demo.theme = themes::forDate(themes::sample(themes::Sample::Halloween)); demo.page = PAGE_DATE; break;
         case 21: demo.name = "night mode"; demo.night = true; break;
+        case 22: demo.name = "indoor";     demo.page = PAGE_INDOOR; demo.indoorSet = true; demo.indoor = env_sensor::Reading();
+                 demo.indoor.valid = demo.indoor.has_humidity = demo.indoor.sea_level_known = true;
+                 demo.indoor.temp_c = 22.1f; demo.indoor.humidity = 44; demo.indoor.pressure_hpa = 1009.2f; demo.indoor.sea_level_hpa = 1013.6f;
+                 demo.indoor.t_temp = env_sensor::Trend::Rising; demo.indoor.t_hum = env_sensor::Trend::Falling; demo.indoor.t_press = env_sensor::Trend::FallingFast;
+                 demo.indoor.d_temp = 0.8f; demo.indoor.d_hum = -4; demo.indoor.d_press = -3.4f; demo.indoor.span_min = 180; break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
       // sounds that a real event would produce (alert chime, lightning chime, message chime, alarm beeps) plus the
@@ -395,7 +450,7 @@ namespace renderer {
       static const char* const SPOKEN[DEMO_COUNT] = {
         "sunny", "date", "rain", "snow", "thunderstorm", "lightning nearby", "wind", "high and low", "sunrise and sunset",
         "forecast", "hourly graph", "tornado warning", "winter storm watch", "alarm", "timer", "timer finished", "message",
-        "christmas", "fourth of july", "valentine's day", "halloween", "night mode" };
+        "christmas", "fourth of july", "valentine's day", "halloween", "night mode", "indoor" };
       demo.lastRing = 0;
       if (demo.sound) {
         demo.soundPending = true;

@@ -42,6 +42,8 @@ arrives, and is configured entirely through its own web interface.
   hearts or sparkles on the day.
 - **Pushbullet**: new weather alerts, nearby lightning and alarms pushed to your phone; pushes sent to the clock
   (from the phone app, IFTTT or scripts) scroll on the panel.
+- **Indoor sensor**: plug a BME280, BMP280 or BME680 into the I2C header and the clock shows indoor temperature,
+  humidity and barometric pressure with rising / falling arrows, keeps 24 hours of history and charts it in the web UI.
 - **Live view** of the panel in the web UI, settings backup and restore.
 - **Buttons**: the board's thumb-wheel switch changes pages, acknowledges alerts, stops or snoozes alarms, refreshes data.
 
@@ -308,6 +310,22 @@ counts down in the bottom half and rings the same way.
 Messages: `POST /api/message` with `{"text": "...", "seconds": 60, "chime": true, "color": "#40C0FF"}` scrolls the
 text (0 seconds = until cleared with `POST /api/message/clear` or the wheel push). The Status tab has a form for it.
 
+## Indoor sensor
+
+Any board with a Bosch **BME280** (temperature, humidity, pressure), **BMP280** (no humidity) or **BME680 / BME688**
+works: wire 3.3 V, GND, SDA to GPIO 1 and SCL to GPIO 2 of the controller (the same bus as the RTC and the codec). The
+firmware finds the sensor at 0x76 or 0x77 by its chip ID at boot, adds an **indoor** page to the rotation (a house icon,
+temperature, humidity and pressure) and shows the values on the Status tab with a three-hour chart. Keep the sensor a
+few inches away from the panel and the controller, which run warm, or dial the offset in on the Location & Weather tab.
+
+Each value carries a **trend arrow**: temperature and humidity are compared with the reading one hour ago (0.5 °C or
+3 % RH to count as a change), pressure with three hours ago as weather services do (1 hPa; while the history is still
+shorter the change is scaled up to the full window). A double arrow marks a fast change: three times the threshold,
+for pressure a sign of a front moving through. Windows and thresholds live on the Location & Weather tab. Pressure is
+shown reduced to sea level, which is what forecasts and weather sites quote, using the elevation Open-Meteo reports for
+your location (or the altitude you enter); switch it off to see station pressure. `GET /api/indoor/history` returns up
+to 24 hours at one point per minute for your own graphs.
+
 ## Spoken announcements
 
 Right after the chime the clock can say what happened in a natural English voice: the NWS event name for a new alert
@@ -368,6 +386,8 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixcloc
 | Board resets when the panel goes bright | panel power supply too weak; lower *Max brightness cap* |
 | WiFi weak while the panel runs | raise TX power on the WiFi tab, route the ribbon cable away from the antenna |
 | No chime | Status tab shows whether the ES8311 was found; check volume, quiet hours, speaker connector |
+| Indoor page says NO SENSOR | Status tab → System lists the I2C addresses; a BME280/BME680 answers at 0x76 or 0x77 (check SDO/address jumper, 3.3 V, SDA on GPIO 1, SCL on GPIO 2) |
+| Indoor temperature reads high | the board warms the sensor: move it on a short lead or set a negative offset on the Location & Weather tab |
 | Chime plays but nothing is spoken | Audio tab: the voice pack must show as installed; press "Download voice pack" (needs internet and about 2 MB of free flash), check `/api/log` for `voice:` lines |
 | Keys do nothing | Status tab shows whether the PCA9557 expander was found; `/api/log` prints raw key states |
 
@@ -393,7 +413,7 @@ src/display/              HUB75 bring-up, off-screen canvas with diff blit, rend
 src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store, updater, voice pack download
 src/time/                 NTP, time zone table, PCF85063 RTC driver
 src/audio/                ES8311 codec, I2S chime synthesizer, ADPCM voice-clip player, voice pack index
-src/io/                   I2C bus with device probing, PCA9557 expander, buttons
+src/io/                   I2C bus with device probing, PCA9557 expander, buttons, BME280/BME680 indoor sensor
 src/web/                  async web server, REST API, OTA
 docs/                     hardware, API and testing notes
 ```

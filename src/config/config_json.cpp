@@ -5,7 +5,7 @@
 
 namespace {
   const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
-  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun" };
+  const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun", "indoor" };
   const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp", "eas_attention", "eas_full", "nws_1050",
                                       "siren_wail", "siren_yelp", "siren_hilo", "alarm_beeps", "doorbell", "sos", "arpeggio", "sonar" };
   constexpr uint8_t CHIME_COUNT = (uint8_t)ChimeStyle::COUNT;
@@ -364,6 +364,30 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (t) changed |= CHG_UPDATE;
   }
 
+  o = src["indoor"];
+  if (!o.isNull()) {
+    t = false;
+    IndoorConfig& in = c.indoor;
+    if (!getBool(o, "enabled", in.enabled, t, err)) return false;
+    if (!getBool(o, "auto_page", in.auto_page, t, err)) return false;
+    if (!getNum(o, "sample_sec", in.sample_sec, t, err, 2, 600)) return false;
+    if (!getNum(o, "temp_offset", in.temp_offset, t, err, -30, 30)) return false;
+    if (!getNum(o, "humidity_offset", in.humidity_offset, t, err, -50, 50)) return false;
+    if (!getNum(o, "altitude_m", in.altitude_m, t, err, -1, 9000)) return false;
+    if (!getBool(o, "sea_level", in.sea_level, t, err)) return false;
+    JsonVariantConst pu = o["pressure_unit"];
+    if (!pu.isNull()) {
+      const char* u = pu | "auto";
+      if (!strcmp(u, "auto")) in.pressure_unit = 0; else if (!strcmp(u, "hpa")) in.pressure_unit = 1; else if (!strcmp(u, "inhg")) in.pressure_unit = 2;
+      else { err = "indoor.pressure_unit: auto, hpa or inhg"; return false; }
+      t = true;
+    }
+    if (!getNum(o, "trend_min", in.trend_min, t, err, 10, 1440)) return false;
+    if (!getNum(o, "pressure_trend_min", in.pressure_trend_min, t, err, 30, 1440)) return false;
+    if (t) changed |= CHG_INDOOR;
+  }
+  c.indoor.temp_offset_c = c.weather.imperial ? c.indoor.temp_offset * 5.0f / 9.0f : c.indoor.temp_offset;
+
   JsonVariantConst al = src["alarms"];
   if (!al.isNull()) {
     if (!al.is<JsonArrayConst>()) { err = "alarms: expected an array"; return false; }
@@ -540,6 +564,18 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["auto_install"] = c.update.auto_install;
   o["url"] = c.update.url;
   o["check_hours"] = c.update.check_hours;
+
+  o = dst["indoor"].to<JsonObject>();
+  o["enabled"] = c.indoor.enabled;
+  o["auto_page"] = c.indoor.auto_page;
+  o["sample_sec"] = c.indoor.sample_sec;
+  o["temp_offset"] = c.indoor.temp_offset;
+  o["humidity_offset"] = c.indoor.humidity_offset;
+  o["altitude_m"] = c.indoor.altitude_m;
+  o["sea_level"] = c.indoor.sea_level;
+  o["pressure_unit"] = c.indoor.pressure_unit == 1 ? "hpa" : c.indoor.pressure_unit == 2 ? "inhg" : "auto";
+  o["trend_min"] = c.indoor.trend_min;
+  o["pressure_trend_min"] = c.indoor.pressure_trend_min;
 
   JsonArray al = dst["alarms"].to<JsonArray>();
   for (uint8_t i = 0; i < MAX_ALARMS; i++) {

@@ -26,6 +26,7 @@ namespace weather_client {
     JsonDocument doc(psramAllocator());
     JsonDocument filter;
     filter["current"] = true;
+    filter["elevation"] = true;
     filter["daily"] = true;
     filter["hourly"] = true;
     filter["utc_offset_seconds"] = true;
@@ -47,6 +48,7 @@ namespace weather_client {
     w.imperial = cfg.weather.imperial;
     w.fetched_ms = millis();
     w.utc_offset_s = doc["utc_offset_seconds"] | 0;
+    w.elevation_m = doc["elevation"] | -9999.0f;
     w.cur.temp = cur["temperature_2m"] | 0.0f;
     w.cur.feels = cur["apparent_temperature"] | w.cur.temp;
     w.cur.humidity = cur["relative_humidity_2m"] | 0.0f;
