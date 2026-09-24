@@ -44,6 +44,54 @@ jobs:
         with:
           path: installer
 
+  # Publishes a GitHub release with the firmware images whenever a version tag (v1.2.3) is pushed.
+  # The tag must match MWC_VERSION in platformio.ini; a tag with a suffix (v1.2.3-beta) becomes a pre-release.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: release
+      - name: Check that the tag matches the firmware version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER=$(sed -n 's/.*MWC_VERSION=\\"\([^"\\]*\)\\".*/\1/p' platformio.ini | head -1)
+          echo "tag $TAG, firmware $VER"
+          if [ "$TAG" != "$VER" ]; then echo "::error::tag v$TAG does not match MWC_VERSION $VER in platformio.ini"; exit 1; fi
+      - name: Write release notes
+        run: |
+          cd release
+          F=$(ls matrix-clock-*-factory.bin); O=$(ls matrix-clock-*-ota.bin)
+          MD5=$(python3 -c "import json;print(json.load(open('manifest.json'))['ota_md5'])")
+          {
+            echo "Firmware ${GITHUB_REF_NAME} for the Seengreat RGB Matrix HUB75 S3 controller with a 64x32 HUB75 panel."
+            echo
+            echo "## Installing"
+            echo "- Easiest: open the [web installer](https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}/) in Chrome or Edge with the board on USB."
+            echo "- With esptool: \`esptool.py --chip esp32s3 write_flash 0x0 $F\`"
+            echo "- Already running the firmware: upload \`$O\` on the Update tab, or let the automatic update pick it up."
+            echo
+            echo "## Checksums"
+            echo "| File | SHA-256 |"
+            echo "|---|---|"
+            echo "| $F | \`$(sha256sum $F | cut -c1-64)\` |"
+            echo "| $O | \`$(sha256sum $O | cut -c1-64)\` (MD5 \`$MD5\`, as in manifest.json) |"
+            echo
+          } > ../notes.md
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRE=""; case "$GITHUB_REF_NAME" in *-*) PRE="--prerelease";; esac
+          gh release create "$GITHUB_REF_NAME" release/*.bin release/manifest.json \
+            --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes $PRE
+
   # Publishes the installer at https://<owner>.github.io/<repo>/ . GitHub Pages needs a public repository
   # (or a paid plan); on a private repository this job fails harmlessly and the firmware artifact above is still built.
   deploy-pages:

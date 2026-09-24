@@ -90,6 +90,10 @@ cd installer
 python -m http.server 8000      # then open http://localhost:8000/ in Chrome or Edge
 ```
 
+Releases: pushing a tag such as `v0.4.0` (matching `MWC_VERSION` in `platformio.ini`) makes the workflow publish a
+GitHub release with the images, checksums and generated notes; a tag with a suffix like `v0.4.0-beta` becomes a
+pre-release.
+
 `installer/` also holds the images directly: `matrix-clock-<version>-factory.bin` (whole flash, write at offset 0 with
 esptool) and `matrix-clock-<version>-ota.bin` (upload from the clock's Update tab). Every push to `main` rebuilds the
 firmware on GitHub Actions, republishes the installer and, through the manifest, offers the new version to every clock
