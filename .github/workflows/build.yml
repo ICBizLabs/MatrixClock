@@ -60,10 +60,10 @@ jobs:
           path: release
       - name: Check that the tag matches the firmware version
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME#v}"; BASE="${TAG%%-*}"
           VER=$(sed -n 's/.*MWC_VERSION=\\"\([^"\\]*\)\\".*/\1/p' platformio.ini | head -1)
-          echo "tag $TAG, firmware $VER"
-          if [ "$TAG" != "$VER" ]; then echo "::error::tag v$TAG does not match MWC_VERSION $VER in platformio.ini"; exit 1; fi
+          echo "tag $TAG (version part $BASE), firmware $VER"
+          if [ "$BASE" != "$VER" ]; then echo "::error::tag v$TAG does not match MWC_VERSION $VER in platformio.ini"; exit 1; fi
       - name: Write release notes
         run: |
           cd release
