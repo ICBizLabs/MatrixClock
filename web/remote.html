@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Matrix Clock remote</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#111418">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Clock remote">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<style>
+:root{--bg:#111418;--card:#1b2027;--line:#2b323c;--fg:#e6e9ee;--mut:#8b95a3;--acc:#3fa9f5;--ok:#3dbb6a;--warn:#f0b429;--bad:#e5484d}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:calc(env(safe-area-inset-top,0px) + 14px) 14px calc(env(safe-area-inset-bottom,0px) + 20px);-webkit-user-select:none;user-select:none}
+main{max-width:480px;margin:0 auto}
+header{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 10px}
+h1{font-size:20px;margin:0}header a{font-size:13px;color:var(--acc);text-decoration:none}
+.st{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:14px;color:var(--mut);margin-bottom:12px;min-height:44px}
+.st b{color:var(--fg);font-weight:600}
+h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:16px 4px 6px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid.three{grid-template-columns:1fr 1fr 1fr}
+button{font:inherit;font-weight:600;font-size:16px;border:1px solid var(--line);border-radius:14px;padding:18px 10px;background:var(--card);color:var(--fg);cursor:pointer;min-height:62px;transition:transform .05s,background .15s}
+button:active{transform:scale(.96);background:#26303c}
+button.acc{background:var(--acc);border-color:var(--acc);color:#fff}
+button.wide{grid-column:1 / -1}
+button small{display:block;font-weight:400;font-size:12px;color:var(--mut);margin-top:2px}
+button.acc small{color:#dbeeff}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translateX(-50%);background:#26303c;color:var(--fg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1}
+.toast.bad{background:var(--bad);color:#fff}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Clock remote</h1><a href="/">Full settings</a></header>
+<div class="st" id="st">connecting…</div>
+
+<h2>Screens</h2>
+<div class="grid">
+ <button class="acc wide" data-a="dismiss">Dismiss / OK<small>stops an alarm, clears a message, acknowledges alerts</small></button>
+ <button data-a="next_page">Next page</button>
+ <button data-a="show_radar">Radar</button>
+ <button data-a="show_forecast">Forecast</button>
+ <button data-a="show_hourly">Hourly graph</button>
+</div>
+
+<h2>Alarm and timer</h2>
+<div class="grid three">
+ <button data-a="timer_5">Timer<small>5 min</small></button>
+ <button data-a="timer_10">Timer<small>10 min</small></button>
+ <button data-a="timer_30">Timer<small>30 min</small></button>
+ <button data-a="alarm_snooze">Snooze</button>
+ <button data-a="alarm_stop">Stop</button>
+ <button data-a="timer_cancel">Cancel timer</button>
+</div>
+
+<h2>Display and sound</h2>
+<div class="grid">
+ <button data-a="bright_down">Dimmer</button>
+ <button data-a="bright_up">Brighter</button>
+ <button data-a="night">Night mode<small id="night">auto</small></button>
+ <button data-a="mute">Mute<small id="mute">sound on</small></button>
+ <button data-a="chime">Chime</button>
+ <button data-a="ack_alerts">Acknowledge alerts</button>
+ <button data-a="refresh">Refresh<small>weather, alerts, radar</small></button>
+ <button data-a="demo">Demo mode<small id="demo">off</small></button>
+ <button class="wide" data-a="show_ip">Show IP address on the clock</button>
+</div>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $=s=>document.querySelector(s);let tt=null;
+function toast(m,bad){const t=$('#toast');t.textContent=m;t.className='toast on'+(bad?' bad':'');clearTimeout(tt);tt=setTimeout(()=>t.className='toast',1400)}
+async function act(name,label){try{const r=await fetch('/api/action?name='+encodeURIComponent(name),{method:'POST'});const j=await r.json();toast(j.ok?label:(j.error||'failed'),!j.ok);setTimeout(status,400)}catch(e){toast('no connection',true)}}
+document.querySelectorAll('button[data-a]').forEach(b=>b.addEventListener('click',()=>act(b.dataset.a,b.firstChild.textContent.trim())));
+async function status(){try{const s=await(await fetch('/api/status')).json();
+ const parts=[];parts.push('<b>'+(s.time&&s.time.valid?s.time.local.slice(11,16):'--:--')+'</b>');
+ if(s.weather&&s.weather.valid)parts.push(Math.round(s.weather.cur.temp)+'°'+(s.weather.units==='imperial'?'F':'C')+' '+s.weather.cur.text);
+ parts.push('screen: '+s.sys.screen+(s.sys.night?' (night)':''));
+ if(s.alarm&&s.alarm.ringing)parts.push('<b style="color:var(--warn)">'+(s.alarm.ringing_timer?'TIMER DONE':'ALARM')+'</b>');
+ else if(s.alarm&&s.alarm.timer_running)parts.push('timer '+Math.floor(s.alarm.timer_remaining_s/60)+':'+String(s.alarm.timer_remaining_s%60).padStart(2,'0'));
+ if(s.alerts&&s.alerts.count)parts.push('<b style="color:var(--bad)">'+s.alerts.count+' alert'+(s.alerts.count>1?'s':'')+'</b>');
+ if(s.message&&s.message.active)parts.push('message showing');
+ $('#st').innerHTML=parts.join(' · ');
+ $('#night').textContent=s.sys.night_override||'auto';$('#demo').textContent=s.demo&&s.demo.on?'on':'off';
+ const cfgAudio=s.audio&&s.audio.enabled!==undefined?s.audio.enabled:null;if(cfgAudio!==null)$('#mute').textContent=cfgAudio?'sound on':'muted';
+}catch(e){$('#st').textContent='no connection';}}
+status();setInterval(status,5000);
+if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('/sw.js').catch(()=>{});
+</script>
+</body>
+</html>

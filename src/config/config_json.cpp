@@ -1,5 +1,6 @@
 // AppConfig <-> JSON in both directions, with server-side validation. One place for every key name.
 #include "config.h"
+#include "io/actions.h"
 #include "util/timeutil.h"
 #include <strings.h>
 
@@ -396,6 +397,36 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
   }
   c.indoor.temp_offset_c = c.weather.imperial ? c.indoor.temp_offset * 5.0f / 9.0f : c.indoor.temp_offset;
 
+  o = src["remote"];
+  if (!o.isNull()) {
+    t = false;
+    RemoteConfig& rm = c.remote;
+    if (!getBool(o, "enabled", rm.enabled, t, err)) return false;
+    if (!getNum(o, "pin", rm.pin, t, err, 0, 48)) return false;
+    JsonVariantConst bt = o["buttons"];
+    if (!bt.isNull()) {
+      if (!bt.is<JsonArrayConst>()) { err = "remote.buttons: expected an array"; return false; }
+      uint8_t n = 0;
+      for (JsonObjectConst b : bt.as<JsonArrayConst>()) {
+        if (n >= MAX_REMOTE_BUTTONS) break;
+        uint32_t code = 0;
+        JsonVariantConst cv = b["code"];
+        if (cv.is<const char*>()) code = (uint32_t)strtoul(cv.as<const char*>(), nullptr, 0);
+        else code = cv | 0UL;
+        actions::Id id = actions::Id::None;
+        const char* an = b["action"] | "none";
+        if (!actions::parse(an, id)) { err = String("remote.buttons: unknown action ") + an; return false; }
+        if (!code || id == actions::Id::None) continue;
+        rm.buttons[n].code = code;
+        rm.buttons[n].action = (uint8_t)id;
+        n++;
+      }
+      rm.nbuttons = n;
+      t = true;
+    }
+    if (t) changed |= CHG_REMOTE;
+  }
+
   o = src["radar"];
   if (!o.isNull()) {
     t = false;
@@ -614,6 +645,20 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["air_poor_below"] = c.indoor.air_poor_below;
   o["air_alert"] = c.indoor.air_alert;
   o["air_alert_min"] = c.indoor.air_alert_min;
+
+  o = dst["remote"].to<JsonObject>();
+  o["enabled"] = c.remote.enabled;
+  o["pin"] = c.remote.pin;
+  {
+    JsonArray bt = o["buttons"].to<JsonArray>();
+    for (uint8_t i = 0; i < c.remote.nbuttons; i++) {
+      JsonObject b = bt.add<JsonObject>();
+      char hex[12];
+      snprintf(hex, sizeof(hex), "0x%08lX", (unsigned long)c.remote.buttons[i].code);
+      b["code"] = hex;
+      b["action"] = actions::name((actions::Id)c.remote.buttons[i].action);
+    }
+  }
 
   o = dst["radar"].to<JsonObject>();
   o["enabled"] = c.radar.enabled;

@@ -22,6 +22,7 @@ namespace web {
     }
     void sendIndex(AsyncWebServerRequest* r) { sendGz(r, WEB_INDEX_GZ, WEB_INDEX_GZ_LEN, WEB_INDEX_ETAG); }
     void sendSetup(AsyncWebServerRequest* r) { sendGz(r, WEB_SETUP_GZ, WEB_SETUP_GZ_LEN, WEB_SETUP_ETAG); }
+    void sendRemote(AsyncWebServerRequest* r) { sendGz(r, WEB_REMOTE_GZ, WEB_REMOTE_GZ_LEN, WEB_REMOTE_ETAG); }
     void sendStatic(AsyncWebServerRequest* r, const char* type, const uint8_t* data, size_t len) {
       AsyncWebServerResponse* res = r->beginResponse(200, type, data, len);
       res->addHeader("Cache-Control", "max-age=86400");
@@ -76,6 +77,7 @@ namespace web {
     });
     server.on("/index.html", HTTP_GET, sendIndex);
     server.on("/setup", HTTP_GET, sendSetup);
+    server.on("/remote", HTTP_GET, sendRemote);
     server.on("/manifest.webmanifest", HTTP_GET, [](AsyncWebServerRequest* r) { sendStatic(r, "application/manifest+json", (const uint8_t*)WEB_MANIFEST, strlen_P(WEB_MANIFEST)); });
     server.on("/sw.js", HTTP_GET, [](AsyncWebServerRequest* r) { sendStatic(r, "text/javascript", (const uint8_t*)WEB_SW_JS, strlen_P(WEB_SW_JS)); });
     server.on("/icon-192.png", HTTP_GET, [](AsyncWebServerRequest* r) { sendStatic(r, "image/png", WEB_ICON_192, WEB_ICON_192_LEN); });

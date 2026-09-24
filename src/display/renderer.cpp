@@ -45,6 +45,8 @@ namespace renderer {
     uint8_t transFrom = 255;       // page id sliding out, 255 = no transition running
     uint32_t transStart = 0;
     bool transFromLightning = false, showLightningPage = false, lightningTurn = false;
+    int8_t briOffset = 0;                       // remote brightness steps (x16)
+    uint8_t nightOvr = 0;                       // 0 auto, 1 on, 2 off
     uint8_t cyclesSinceFull = 0, cyclesSinceRadar = 0;
     uint8_t fullTurn = 0;                       // round-robin over the enabled full screens
     uint16_t* radarFrame = nullptr;             // PSRAM, W*H pixels (allocated in begin)
@@ -685,6 +687,7 @@ namespace renderer {
       const DisplayConfig& d = g_cfg.display;
       uint16_t nowMin = (uint16_t)(lt.tm_hour * 60 + lt.tm_min);
       night = demo.on ? demo.night : (timeValid && d.night.enabled && in_window(d.night.start, d.night.end, nowMin));
+      if (!demo.on && nightOvr) night = nightOvr == 1;
       uint8_t level = d.brightness;
       if (night) level = d.night.level;
       else if (timeValid && d.schedule.enabled) {
@@ -695,6 +698,10 @@ namespace renderer {
         } else day = in_window(d.schedule.day_start, d.schedule.night_start, nowMin);
         level = day ? d.schedule.day_level : d.schedule.night_level;
       }
+      int adj = (int)level + (int)briOffset * 16;
+      if (adj < 1) adj = 1;
+      if (adj > 255) adj = 255;
+      level = (uint8_t)adj;
       return level ? level : 1;
     }
 
@@ -786,6 +793,16 @@ namespace renderer {
   const char* demoScenario() { return demo.on ? demo.name : ""; }
   uint32_t demoRemainingSec() { if (!demo.on) return 0; int32_t d = (int32_t)(demo.endAt - millis()); return d > 0 ? (uint32_t)d / 1000 : 0; }
 
+  void adjustBrightness(int8_t steps) {
+    int v = briOffset + steps;
+    if (v < -12) v = -12;
+    if (v > 12) v = 12;
+    briOffset = (int8_t)v;
+    lastBri = 0;   // re-evaluate on the next frame
+  }
+  int8_t brightnessOffset() { return briOffset; }
+  void cycleNightOverride() { nightOvr = (uint8_t)((nightOvr + 1) % 3); lastBri = 0; }
+  uint8_t nightOverride() { return nightOvr; }
   bool nightActive() { return night; }
   uint8_t effectiveBrightness() { return lastBri; }
   const char* themeName() { return theme ? theme->name : ""; }

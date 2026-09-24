@@ -21,6 +21,8 @@
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
 #include "io/env_sensor.h"
+#include "io/ir_remote.h"
+#include "io/actions.h"
 #include "time/time_service.h"
 #include "time/tz_table.h"
 #include "alarm/alarm.h"
@@ -106,6 +108,18 @@ namespace web {
       sys["brightness"] = renderer::effectiveBrightness();
       sys["night"] = renderer::nightActive();
       sys["reboot_required"] = app::rebootRequiredFlags() != 0;
+      sys["brightness_offset"] = renderer::brightnessOffset();
+      sys["night_override"] = renderer::nightOverride() == 1 ? "on" : renderer::nightOverride() == 2 ? "off" : "auto";
+      {
+        ir_remote::Status rs = ir_remote::status();
+        JsonObject rm = root["remote"].to<JsonObject>();
+        rm["enabled"] = rs.enabled; rm["pin"] = rs.pin; rm["received"] = rs.received; rm["learning"] = rs.learning;
+        char hex[12]; snprintf(hex, sizeof(hex), "0x%08lX", (unsigned long)rs.last_code);
+        rm["last_code"] = rs.last_code ? hex : "";
+        rm["last_proto"] = rs.last_proto;
+        rm["last_age_s"] = rs.last_ms ? (long)((millis() - rs.last_ms) / 1000) : -1L;
+        rm["last_ms"] = rs.last_ms;
+      }
       {
         app::LastReset lr = app::lastReset();
         JsonObject rs = sys["last_reset"].to<JsonObject>();
@@ -146,7 +160,7 @@ namespace web {
       up["file"] = us.file;
       up["size"] = us.size;
       up["progress"] = us.progress;
-      up["last_check_age_s"] = us.last_check_ms ? (millis() - us.last_check_ms) / 1000 : -1;
+      up["last_check_age_s"] = us.last_check_ms ? (long)((millis() - us.last_check_ms) / 1000) : -1L;
       up["error"] = us.err;
       pushbullet::Status pbs = pushbullet::status();
       JsonObject pb = root["pushbullet"].to<JsonObject>();
@@ -154,6 +168,7 @@ namespace web {
       pb["errors"] = pbs.errors; pb["last_err"] = pbs.last_err; pb["last_poll_age_s"] = pbs.last_poll_ms ? (millis() - pbs.last_poll_ms) / 1000 : 0;
       JsonObject au = root["audio"].to<JsonObject>();
       au["available"] = audio_out::available();
+      app::cfgLock(); au["enabled"] = g_cfg.audio.enabled; app::cfgUnlock();
       au["quiet_now"] = audio_out::inQuietHours();
       au["buttons"] = buttons::available();
       voice::PackInfo pi = voice::info();
@@ -176,7 +191,7 @@ namespace web {
         JsonObject rd = root["radar"].to<JsonObject>();
         rd["enabled"] = rs.enabled;
         rd["frames"] = rs.frames;
-        rd["last_ok_age_s"] = rs.last_ok_ms ? (millis() - rs.last_ok_ms) / 1000 : -1;
+        rd["last_ok_age_s"] = rs.last_ok_ms ? (long)((millis() - rs.last_ok_ms) / 1000) : -1L;
         rd["error"] = rs.err;
         rd["fails"] = rs.fails;
         rd["echo_near"] = rs.echo_near;
@@ -289,7 +304,7 @@ namespace web {
       JsonArray reboot = root["reboot_required"].to<JsonArray>();
       struct { uint16_t bit; const char* name; bool reboot; } sections[] = {
         { CHG_WIFI, "wifi", false }, { CHG_LOCATION, "location", false }, { CHG_TIME, "time", false }, { CHG_WEATHER, "weather", false },
-        { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false }, { CHG_RADAR, "radar", false },
+        { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false }, { CHG_INDOOR, "indoor", false }, { CHG_RADAR, "radar", false }, { CHG_REMOTE, "remote", false },
         { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false } };
       for (auto& s : sections) if (changed & s.bit) (s.reboot ? reboot : applied).add(s.name);
       res->setLength();
@@ -452,6 +467,38 @@ namespace web {
       res->addHeader("Cache-Control", "no-store");
       r->send(res);
     });
+    server.on("/api/action", HTTP_POST, [](AsyncWebServerRequest* r) {
+      String n = r->hasParam("name", true) ? r->getParam("name", true)->value() : (r->hasParam("name") ? r->getParam("name")->value() : "");
+      actions::Id id;
+      if (!actions::parse(n.c_str(), id) || id == actions::Id::None) { sendJsonError(r, 400, "unknown action"); return; }
+      actions::run(id, "web");
+      r->send(200, "application/json", "{\"ok\":true}");
+    });
+    server.on("/api/actions", HTTP_GET, [](AsyncWebServerRequest* r) {
+      auto* res = new AsyncJsonResponse(false);
+      JsonArray arr = res->getRoot()["actions"].to<JsonArray>();
+      for (uint8_t i = 1; i < (uint8_t)actions::Id::COUNT; i++) {
+        JsonObject a = arr.add<JsonObject>();
+        a["name"] = actions::name((actions::Id)i);
+        a["label"] = actions::label((actions::Id)i);
+      }
+      res->setLength();
+      r->send(res);
+    });
+    server.on("/api/remote", HTTP_GET, [](AsyncWebServerRequest* r) {
+      auto* res = new AsyncJsonResponse(false);
+      JsonObject root = res->getRoot();
+      ir_remote::Status rs = ir_remote::status();
+      root["enabled"] = rs.enabled; root["pin"] = rs.pin; root["received"] = rs.received; root["learning"] = rs.learning;
+      char hex[12]; snprintf(hex, sizeof(hex), "0x%08lX", (unsigned long)rs.last_code);
+      root["last_code"] = rs.last_code ? hex : "";
+      root["last_proto"] = rs.last_proto;
+      root["last_ms"] = rs.last_ms;
+      root["last_age_s"] = rs.last_ms ? (long)((millis() - rs.last_ms) / 1000) : -1L;
+      res->setLength();
+      r->send(res);
+    });
+    server.on("/api/remote/learn", HTTP_POST, [](AsyncWebServerRequest* r) { ir_remote::startLearn(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/radar/base", HTTP_GET, [](AsyncWebServerRequest* r) {
       uint8_t probe;
       if (!radar::copyBaseBytes(&probe, 0, 1)) { sendJsonError(r, 404, "no base map loaded"); return; }
@@ -469,7 +516,7 @@ namespace web {
       radar::Status rs = radar::status();
       root["enabled"] = rs.enabled; root["frames"] = rs.frames; root["error"] = rs.err; root["echo_near"] = rs.echo_near; root["echo_pct"] = rs.echo_pct;
       root["base"] = rs.base_state == 2 ? "ready" : rs.base_state == 1 ? "loading" : rs.base_state == 3 ? "error" : "off";
-      root["last_ok_age_s"] = rs.last_ok_ms ? (millis() - rs.last_ok_ms) / 1000 : -1;
+      root["last_ok_age_s"] = rs.last_ok_ms ? (long)((millis() - rs.last_ok_ms) / 1000) : -1L;
       JsonArray ages = root["age_min"].to<JsonArray>();
       for (uint8_t i = 0; i < rs.frames; i++) ages.add(radar::frameAgeMin(i));
       res->setLength();

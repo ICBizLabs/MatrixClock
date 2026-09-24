@@ -46,6 +46,10 @@ pio device monitor           # serial log at 115200
    and the `air` page appears; breathing on the sensor or opening a marker pen drops the score and, after two minutes
    below the poor threshold, triggers the chime, "Air quality poor" and a push. The `baro` page scrolls the Zambretti
    text once 30 minutes of pressure history exist.
+   **Remote** – with a receiver on GPIO 44 the boot log shows `remote: IR receiver on GPIO 44`; pressing any key
+   raises `received` in `curl -s http://matrixclock.local/api/remote` and logs `remote: code 0x... not mapped`; after
+   mapping it on the Remote tab the key runs its action. `curl -X POST 'http://matrixclock.local/api/action?name=show_radar'`
+   does the same from a script, and http://matrixclock.local/remote works on a phone.
 7. **RTC / buttons / OTA** – power-cycle with WiFi unavailable: the time is right immediately and
    `/api/status` `time.source` is `rtc`. K1 short = next page, K1 long = test pattern, K2 short = acknowledge alerts,
    K2 long = test chime, K3 short = refresh data, K3 long = reboot.

@@ -11,6 +11,7 @@
 #include "io/i2c_bus.h"
 #include "io/buttons.h"
 #include "io/env_sensor.h"
+#include "io/ir_remote.h"
 #include "config/config.h"
 #include "display/panel.h"
 #include "display/canvas.h"
@@ -124,6 +125,7 @@ void setup() {
     if (env_sensor::hasGas()) addPage(PAGE_AIR);
   }
   lightning::begin();
+  ir_remote::begin(g_cfg.remote);
   LOGI("setup done, heap %lu", (unsigned long)ESP.getFreeHeap());
 }
 
@@ -133,6 +135,7 @@ void loop() {
   timesvc::loop();
   buttons::loop();
   env_sensor::loop(now);
+  ir_remote::loop();
   app::loop();
   if (!bootConfirmed && now > BOOT_OK_AFTER_MS) { bootConfirmed = true; g_bootAttempts = 0; }
   if (wifi_mgr::consumeConnectedEvent()) {

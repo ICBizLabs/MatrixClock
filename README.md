@@ -51,6 +51,8 @@ arrives, and is configured entirely through its own web interface.
   and mould risk, and a **Zambretti barometer forecast** page.
 - **Live view** of the panel in the web UI, settings backup and restore.
 - **Buttons**: the board's thumb-wheel switch changes pages, acknowledges alerts, stops or snoozes alarms, refreshes data.
+- **Remote control**: a $2 infrared receiver on one pin makes any NEC remote (or a learned TV remote) drive the clock;
+  a phone page at `/remote` has big buttons for the same actions.
 
 ## Hardware
 
@@ -251,6 +253,8 @@ hold the settings. Changes apply immediately except panel driver settings, which
 | Panel: HUB75 driver settings and the test pattern | Notify: Pushbullet notifications in both directions |
 | <img src="docs/ui/ui-audio.png" alt="Audio tab"> | <img src="docs/ui/ui-wifi.png" alt="WiFi tab"> |
 | Audio: chime, volume, quiet hours, spoken announcements | WiFi: network, hostname, setup AP password, factory reset |
+| <img src="docs/ui/ui-remote.png" alt="Remote tab"> | <img src="docs/ui/remote.png" width="300" alt="Phone remote page"> |
+| Remote: infrared receiver, learn mode, key mapping | The phone remote at /remote |
 
 Screenshots are taken from the real page served with sample data; images live in `docs/ui/`.
 
@@ -411,6 +415,22 @@ lightning strike of a storm (and at most every five minutes after that), and opt
 on it also polls your account and scrolls any push sent to all devices or to the clock: pick "Matrix Clock" in the
 phone app, or use IFTTT / Home Assistant / `curl` against the Pushbullet API. Pushes the clock sent itself are ignored.
 
+## Remote control
+
+**Infrared.** Solder or plug a VS1838B / TSOP38238 receiver module to the bottom header: OUT to the **RX0** pad
+(GPIO 44, free because the console runs over USB), VCC to 3V3, GND to GND. The Remote tab lists actions; press
+*Learn* on a row, then a key on the remote, and its code fills in. NEC remotes (the tiny 21-key Arduino remotes,
+most TV and set-top box remotes) decode to their standard 32-bit code; anything else is recognised by a fingerprint of
+its timing, so it can still be learned. Holding a key repeats only the brightness actions. Up to 24 keys can be mapped.
+
+<img src="docs/ui/remote.png" width="300" alt="Phone remote page with big buttons">
+
+**Phone.** http://matrixclock.local/remote is a one-screen remote for a phone or tablet, made to be added to the home
+screen: dismiss, next page, radar, forecast, hourly graph, 5/10/30-minute timers, snooze and stop, brighter and dimmer,
+night mode, mute, chime, refresh, demo, show IP. Scripts and home automation can call the same actions with
+`POST /api/action?name=show_radar`; `GET /api/actions` lists them. Brightness steps and the night-mode override live
+in RAM and reset at reboot; mute toggles the audio switch for the session.
+
 ## Buttons (thumb-wheel switch)
 
 | Key | Short press | Long press (1.5 s) |
@@ -466,7 +486,7 @@ platformio.ini            build environment `seengreat_hub75_s3` (pioarduino, Ar
 partitions/mwc_16MB.csv   two 3 MB OTA app slots + LittleFS
 include/pins.h            every GPIO in one place
 include/fonts/            7x11 clock digits
-web/index.html            the web UI; tools/build_web.py gzips it into flash at build time
+web/index.html            the web UI (with setup.html and remote.html); tools/build_web.py gzips them into flash at build time
 tools/make_voice_pack.py  renders the spoken phrases with Piper TTS into the voice pack (run in CI)
 src/main.cpp              boot order and the 30 fps frame loop
 src/app.*                 config staging from the web, reboot / factory reset
@@ -475,7 +495,7 @@ src/display/              HUB75 bring-up, off-screen canvas with diff blit, rend
 src/net/                  WiFi + captive portal, network task, Open-Meteo and NWS clients, alert store, updater, voice pack download, radar loop
 src/time/                 NTP, time zone table, PCF85063 RTC driver
 src/audio/                ES8311 codec, I2S chime synthesizer, ADPCM voice-clip player, voice pack index
-src/io/                   I2C bus with device probing, PCA9557 expander, buttons, BME280/BME680 indoor sensor
+src/io/                   I2C bus with device probing, PCA9557 expander, buttons, BME280/BME680 indoor sensor, IR receiver, actions
 src/web/                  async web server, REST API, OTA
 docs/                     hardware, API and testing notes
 ```

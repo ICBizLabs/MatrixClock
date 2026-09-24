@@ -217,6 +217,15 @@ struct RadarConfig {              // animated NEXRAD loop from the Iowa Environm
   uint8_t base_map = 3;           // underlay from NASA GIBS: bit 0 = coastline, bit 1 = land / water tint (3 = both, 0 = none)
 };
 
+constexpr uint8_t MAX_REMOTE_BUTTONS = 24;
+struct RemoteButton { uint32_t code = 0; uint8_t action = 0; };   // action = actions::Id
+struct RemoteConfig {             // infrared receiver module on one GPIO (see io/ir_remote.h)
+  bool enabled = true;
+  int8_t pin = 44;                // RX0 pad on the bottom header; the console runs over USB so it is free
+  RemoteButton buttons[MAX_REMOTE_BUTTONS];
+  uint8_t nbuttons = 0;
+};
+
 struct AppConfig {
   WifiConfig wifi;
   LocationConfig location;
@@ -232,13 +241,14 @@ struct AppConfig {
   UpdateConfig update;
   IndoorConfig indoor;
   RadarConfig radar;
+  RemoteConfig remote;
   bool first_boot = true;
 };
 
 // Bit flags telling which sections a JSON merge touched (used to apply changes live / ask for a reboot)
 enum : uint16_t {
   CHG_WIFI = 1, CHG_LOCATION = 2, CHG_TIME = 4, CHG_WEATHER = 8,
-  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192
+  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048, CHG_INDOOR = 4096, CHG_RADAR = 8192, CHG_REMOTE = 16384
 };
 
 extern AppConfig g_cfg;

@@ -25,6 +25,10 @@ namespace renderer {
   bool consumeDemoSound(uint8_t& style, const char*& phrase);   // true when the demo wants a sound now: chime (ChimeStyle value, None = no chime) and/or a spoken phrase (nullptr = none)
   const char* demoScenario();
   uint32_t demoRemainingSec();
+  void adjustBrightness(int8_t steps);        // remote: +-16 per step on top of the schedule, clamped
+  int8_t brightnessOffset();
+  void cycleNightOverride();                  // auto -> on -> off -> auto
+  uint8_t nightOverride();                    // 0 auto, 1 forced on, 2 forced off
   bool nightActive();
   uint8_t effectiveBrightness();
   const char* screenName();

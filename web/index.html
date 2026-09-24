@@ -38,12 +38,12 @@ progress{width:100%;height:10px}
 </style>
 </head>
 <body>
-<header><h1>Matrix Weather Clock</h1><span id="hdr">connecting…</span><a href="/setup" style="margin-left:auto;font-size:13px;color:var(--acc)">Setup wizard</a></header>
+<header><h1>Matrix Weather Clock</h1><span id="hdr">connecting…</span><a href="/remote" style="margin-left:auto;font-size:13px;color:var(--acc)">Phone remote</a><a href="/setup" style="margin-left:14px;font-size:13px;color:var(--acc)">Setup wizard</a></header>
 <div class="a2hs" id="a2hs"><img src="/icon-192.png" alt=""><span id="a2hs-text">Add this page to your home screen to use it like an app.</span><button class="btn" id="a2hs-btn" hidden>Install</button><button class="btn sec" onclick="a2hsDismiss()">Not now</button></div>
 <nav>
 <button data-tab="status" class="on">Status</button><button data-tab="weather">Location &amp; Weather</button>
 <button data-tab="display">Display</button><button data-tab="alarms">Alarms</button><button data-tab="panel">Panel</button><button data-tab="audio">Audio</button>
-<button data-tab="notify">Notify</button><button data-tab="wifi">WiFi</button><button data-tab="update">Update</button>
+<button data-tab="notify">Notify</button><button data-tab="remote">Remote</button><button data-tab="wifi">WiFi</button><button data-tab="update">Update</button>
 </nav>
 <main>
 
@@ -288,6 +288,19 @@ progress{width:100%;height:10px}
  <p class="msg">The clock registers itself as a device called "Matrix Clock" in your Pushbullet account, so you can push text to it from the phone app (choose the device) or from IFTTT / scripts. Leave the token as *** to keep the stored one.</p></div>
 </section>
 
+<section id="remote">
+ <div class="card"><h2>Infrared remote</h2><div class="grid">
+  <label class="chk"><input data-k="remote.enabled" type="checkbox">Enabled</label>
+  <label>Receiver GPIO (44 = the RX0 pad on the bottom header)<input data-k="remote.pin" type="number" min="0" max="48"></label>
+ </div>
+ <table id="rm-status"></table>
+ <p class="msg">Wire a VS1838B / TSOP38238 receiver module: OUT to the GPIO above, VCC to 3V3, GND to GND. Any NEC remote works directly (the $1 21-key remotes, most TV and set-top box remotes); other protocols are learned by their timing. Press <b>Learn</b> on a row, then the button on the remote, and the code fills in. Save when done.</p>
+ <div id="rm-rows"></div>
+ <div class="row"><button class="btn" onclick="saveRemote()">Save</button><button class="btn sec" onclick="addRemoteRow()">Add a button</button><span class="msg" id="msg-remote"></span></div></div>
+ <div class="card"><h2>Phone remote</h2>
+  <p class="msg">Open <a href="/remote" style="color:var(--acc)">/remote</a> on a phone or tablet and add it to the home screen for a full-screen remote with big buttons: dismiss, next page, radar, forecast, hourly graph, timers, snooze and stop, brightness, night mode, mute, demo, refresh. Anything else can use <code>POST /api/action?name=next_page</code>; <code>GET /api/actions</code> lists the names.</p></div>
+</section>
+
 <section id="wifi">
  <div class="card"><h2>Network</h2><div class="grid">
   <label>SSID<input data-k="wifi.ssid" list="ssids" maxlength="32"><datalist id="ssids"></datalist></label>
@@ -345,7 +358,7 @@ async function save(section){const body=collect(section);if(section==='weather')
  if(!r.ok||!j.ok){say(section,j.error||('HTTP '+r.status),'bad');return;}
  say(section,'saved'+(j.reboot_required&&j.reboot_required.length?' — reboot required for: '+j.reboot_required.join(', '):''),j.reboot_required&&j.reboot_required.length?'warn':'ok');
  loadConfig();}catch(e){say(section,String(e),'bad');}}
-async function loadConfig(){const r=await fetch('/api/config');cfg=await r.json();const t=$('#tzsel');t.innerHTML='';(cfg.tz_options||[]).forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;t.appendChild(o);});
+async function loadConfig(){const r=await fetch('/api/config');cfg=await r.json();remoteRows();const t=$('#tzsel');t.innerHTML='';(cfg.tz_options||[]).forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;t.appendChild(o);});
  const custom=document.createElement('option');custom.value=cfg.time.tz_id;custom.textContent='Custom';if(!(cfg.tz_options||[]).some(z=>z.id===cfg.time.tz_id))t.appendChild(custom);
  fill();if(cfg.alarms)fillAlarms();t.onchange=()=>{const o=t.selectedOptions[0];if(o&&o.dataset.posix)$('[data-k="time.tz_posix"]').value=o.dataset.posix;};}
 async function setDemo(on){const j=await post('/api/demo',null,'on='+(on?1:0)+'&minutes='+(Number($('#demomin').value)||10)+'&sound='+($('#demosound').checked?1:0));if(!j||!j.ok)$('#demo').checked=!on;}
@@ -405,6 +418,25 @@ async function drawIndoorChart(u,inhg){try{const r=await fetch('/api/indoor/hist
   g.strokeStyle=s.c;g.lineWidth=2;g.beginPath();s.v.forEach((v,i)=>{const x=L+cw*i/(n-1),y=T+ch*(1-(v-lo)/(hi-lo));i?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();
   g.fillStyle=s.c;g.font='13px system-ui';const lab=s.l+' '+s.v[n-1].toFixed(s.d)+' (min '+Math.min(...s.v).toFixed(s.d)+', max '+Math.max(...s.v).toFixed(s.d)+')';g.fillText(lab,lx,14);lx+=g.measureText(lab).width+22;});
  g.fillStyle='#8a94a6';g.font='12px system-ui';g.fillText('-'+j.age_min[0]+' min',L,H-6);g.fillText('now',W-R-28,H-6);}catch(e){}}
+let ACTIONS=null;
+async function loadActions(){if(ACTIONS)return ACTIONS;try{ACTIONS=(await(await fetch('/api/actions')).json()).actions;}catch(e){ACTIONS=[]}return ACTIONS}
+function actionSelect(sel){let h='<option value="none">Nothing</option>';(ACTIONS||[]).forEach(a=>h+='<option value="'+a.name+'"'+(a.name===sel?' selected':'')+'>'+a.label+'</option>');return h}
+async function remoteRows(){await loadActions();const box=$('#rm-rows');box.innerHTML='';const bt=(cfg&&cfg.remote&&cfg.remote.buttons)||[];
+ if(!bt.length){['next_page','dismiss','show_radar','show_forecast','bright_up','bright_down'].forEach(a=>addRemoteRow('',a));return}
+ bt.forEach(b=>addRemoteRow(b.code,b.action));}
+function addRemoteRow(code,action){const box=$('#rm-rows');const d=document.createElement('div');d.className='row rm-row';d.style.marginTop='6px';
+ d.innerHTML='<select class="rm-act" style="flex:2">'+actionSelect(action||'none')+'</select><input class="rm-code" placeholder="0x00FF629D" value="'+(code||'')+'" style="flex:1;min-width:120px;font-family:monospace"><button class="btn sec" onclick="learnRemote(this)">Learn</button><button class="btn sec" onclick="this.parentNode.remove()" title="remove">✕</button>';
+ box.appendChild(d);}
+async function learnRemote(btn){const row=btn.parentNode;const inp=row.querySelector('.rm-code');btn.disabled=true;btn.textContent='press a key…';
+ try{const before=(await(await fetch('/api/remote')).json()).last_ms||0;await fetch('/api/remote/learn',{method:'POST'});const t0=Date.now();
+  while(Date.now()-t0<20000){await new Promise(r=>setTimeout(r,400));const j=await(await fetch('/api/remote')).json();if(j.last_ms&&j.last_ms!==before){inp.value=j.last_code;say('remote','learned '+j.last_code+' ('+j.last_proto+')','ok');break}}
+  if(!inp.value)say('remote','nothing received','bad');}catch(e){say('remote','failed: '+e,'bad')}
+ btn.disabled=false;btn.textContent='Learn';}
+async function saveRemote(){const buttons=[];$$('.rm-row').forEach(r=>{const a=r.querySelector('.rm-act').value,c=r.querySelector('.rm-code').value.trim();if(a!=='none'&&c)buttons.push({action:a,code:c})});
+ const body={remote:{enabled:$('[data-k="remote.enabled"]').checked,pin:Number($('[data-k="remote.pin"]').value)||44,buttons}};say('remote','saving…');
+ const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();say('remote',j.ok?'saved':(j.error||'failed'),j.ok?'ok':'bad');if(j.ok)loadConfig();}
+function remoteStatus(R){const t=$('#rm-status');if(!t||!R)return;t.innerHTML='';row(t,'Receiver',R.enabled?'GPIO '+R.pin+', '+R.received+' codes received':'off');
+ row(t,'Last code',R.last_code?'<code>'+R.last_code+'</code> ('+R.last_proto+', '+(R.last_age_s<60?R.last_age_s+' s':Math.round(R.last_age_s/60)+' min')+' ago)':'none yet');}
 let phrasesLoaded=false;
 function voiceStatus(V){const t=$('#st-voice');if(!t)return;t.innerHTML='';
  row(t,'Voice pack',V.installed?(V.voice||'voice')+' v'+V.version+', '+V.clips+' phrases':'<span class="warn">not downloaded'+(V.available?' (v'+V.available+' available)':'')+'</span>');
@@ -427,7 +459,7 @@ async function status(){try{const r=await fetch('/api/status');const s=await r.j
  const D=s.demo||{};if(document.activeElement!==$('#demo'))$('#demo').checked=!!D.on;say('demo',D.on?'showing: '+D.scenario+' · '+Math.ceil(D.remaining_s/60)+' min left':'','ok');
  row(y,'Forecast / hourly screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
  row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
- row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});indoorStatus(s.indoor);radarStatus(s.radar);row(y,'Radar',s.radar&&s.radar.enabled?(s.radar.frames+' frames'+(s.radar.newest_age_min>=0?', newest '+s.radar.newest_age_min+' min old':'')+(s.radar.echo_near?' <span class="warn">echoes nearby</span>':'')+(s.radar.error?' <span class="bad">'+s.radar.error+'</span>':'')):'off');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
+ row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');voiceStatus(s.speech||{});indoorStatus(s.indoor);radarStatus(s.radar);remoteStatus(s.remote);row(y,'Radar',s.radar&&s.radar.enabled?(s.radar.frames+' frames'+(s.radar.newest_age_min>=0?', newest '+s.radar.newest_age_min+' min old':'')+(s.radar.echo_near?' <span class="warn">echoes nearby</span>':'')+(s.radar.error?' <span class="bad">'+s.radar.error+'</span>':'')):'off');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
  const U=s.update||{};const ut=$('#st-update');if(ut){ut.innerHTML='';row(ut,'Installed','v'+U.current);row(ut,'Latest',U.latest?'v'+U.latest+(U.state==='available'?' <span class="warn">new version available</span>':U.state==='up-to-date'?' <span class="ok">up to date</span>':''):'not checked yet');
   row(ut,'Status',U.state+(U.state==='downloading'?' '+U.progress+'%':'')+(U.error?' <span class="bad">'+U.error+'</span>':'')+(U.last_check_age_s>=0?' · checked '+ago(U.last_check_age_s):''));$('#installbtn').disabled=U.state!=='available';}
  if(U.state==='available')row(y,'Update','<span class="warn">v'+U.latest+' available</span> (Update tab)');

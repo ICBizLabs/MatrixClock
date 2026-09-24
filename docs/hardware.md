@@ -16,6 +16,10 @@ VH-4P screw terminal for panel power (5 V / 4 A max). Wiki: https://seengreat.co
 Indoor sensor (optional): a BME280 / BMP280 / BME680 breakout on the I2C pins (3.3 V, GND, SDA = GPIO 1, SCL = GPIO 2),
 address 0x76 or 0x77, identified by the chip ID register (0x60 / 0x58 / 0x61). Sampled in forced mode every 10 s.
 
+Infrared remote (optional): a VS1838B / TSOP38238 receiver module on the bottom header, OUT to RX0 (GPIO 44), VCC 3V3,
+GND. GPIO 44 is UART0 RX, unused because the console is the native USB port; do not use IO45 or IO46 next to it, both
+are boot strapping pins and an idle-high receiver would change the boot mode. The RMT peripheral captures the frames.
+
 I2C devices: PCF85063 RTC at 0x51, ES8311 codec at 0x18 or 0x19, PCA9557 IO expander (thumb-wheel switch) at
 one of 0x18-0x1F. The firmware probes the ES8311 chip ID (0xFD = 0x83, 0xFE = 0x11) to tell the two apart and
 logs the result at boot (`/api/log`).
