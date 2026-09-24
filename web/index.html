@@ -52,8 +52,9 @@ progress{width:100%;height:10px}
   <div class="row"><label class="chk"><input type="checkbox" id="pvlive" checked>Auto refresh</label><span class="msg" id="msg-pv"></span></div></div>
  <div class="card"><h2>Now</h2><table id="st-now"></table></div>
  <div class="card"><h2>Demo mode</h2><div class="row"><label class="chk"><input type="checkbox" id="demo" onchange="setDemo(this.checked)">Cycle through demo screens</label>
-  for <input id="demomin" type="number" min="1" max="720" value="10" style="width:80px"> minutes <span class="msg" id="msg-demo"></span></div>
-  <p class="msg">Shows sample weather, animations, forecast and hourly screens, alert banners, lightning, an alarm, a timer, a message, holiday themes and night mode, eight seconds each, using made-up data. Switches itself off after the time above; the wheel push also ends it. No sounds are played.</p></div>
+  for <input id="demomin" type="number" min="1" max="720" value="10" style="width:80px"> minutes
+  <label class="chk"><input type="checkbox" id="demosound" onchange="if($('#demo').checked)setDemo(true)">with sounds</label><span class="msg" id="msg-demo"></span></div>
+  <p class="msg">Shows sample weather, animations, forecast and hourly screens, alert banners, lightning, an alarm, a timer, a message, holiday themes and night mode, eight seconds each, using made-up data. Switches itself off after the time above; the wheel push also ends it. With sounds on, the alert, lightning, alarm, timer and message scenarios play their chimes even during quiet hours.</p></div>
  <div class="card"><h2>Send a message</h2><div class="row"><input id="msgtext" placeholder="Text to scroll on the clock" maxlength="200" style="flex:1;min-width:200px">
   <input id="msgsec" type="number" min="0" max="86400" value="30" style="width:80px" title="seconds, 0 = until cleared"><label class="chk"><input type="checkbox" id="msgchime">Chime</label>
   <button class="btn" onclick="sendMsg()">Show</button><button class="btn sec" onclick="post('/api/message/clear')">Clear</button></div>
@@ -294,7 +295,7 @@ async function save(section){const body=collect(section);if(section==='weather')
 async function loadConfig(){const r=await fetch('/api/config');cfg=await r.json();const t=$('#tzsel');t.innerHTML='';(cfg.tz_options||[]).forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';o.dataset.posix=z.posix;t.appendChild(o);});
  const custom=document.createElement('option');custom.value=cfg.time.tz_id;custom.textContent='Custom';if(!(cfg.tz_options||[]).some(z=>z.id===cfg.time.tz_id))t.appendChild(custom);
  fill();if(cfg.alarms)fillAlarms();t.onchange=()=>{const o=t.selectedOptions[0];if(o&&o.dataset.posix)$('[data-k="time.tz_posix"]').value=o.dataset.posix;};}
-async function setDemo(on){const j=await post('/api/demo',null,'on='+(on?1:0)+'&minutes='+(Number($('#demomin').value)||10));if(!j||!j.ok)$('#demo').checked=!on;}
+async function setDemo(on){const j=await post('/api/demo',null,'on='+(on?1:0)+'&minutes='+(Number($('#demomin').value)||10)+'&sound='+($('#demosound').checked?1:0));if(!j||!j.ok)$('#demo').checked=!on;}
 async function sendMsg(){const t=$('#msgtext').value.trim();if(!t)return;await post('/api/message',{text:t,seconds:Number($('#msgsec').value)||0,chime:$('#msgchime').checked});}
 function fillAlarms(){(cfg.alarms||[]).forEach((a,i)=>{$('.al-en[data-i="'+i+'"]').checked=!!a.enabled;$('.al-time[data-i="'+i+'"]').value=a.time||'07:00';$('.al-label[data-i="'+i+'"]').value=a.label||'';$('.al-chime[data-i="'+i+'"]').value=a.chime||'triple_beep';
  $$('.al-day[data-i="'+i+'"]').forEach(d=>d.checked=(a.days||'0000000')[Number(d.dataset.d)]==='1');});}

@@ -19,8 +19,10 @@ namespace renderer {
   String messageText();
   uint32_t messageRemainingSec();
   void nextPage();
-  void setDemo(bool on, uint32_t total_ms = 10 * 60000UL);   // cycle through demo scenarios (synthetic data), auto-off
+  void setDemo(bool on, uint32_t total_ms = 10 * 60000UL, bool sound = false);   // cycle demo scenarios (synthetic data), auto-off
   bool demoActive();
+  bool demoSound();
+  bool consumeDemoSound(uint8_t& style);      // true when the demo wants a chime played now (ChimeStyle value)
   const char* demoScenario();
   uint32_t demoRemainingSec();
   bool nightActive();

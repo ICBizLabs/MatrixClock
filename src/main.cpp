@@ -116,6 +116,7 @@ void loop() {
     timesvc::onWifiUp(g_cfg.time);
     net_task::kick(net_task::JOB_WEATHER | net_task::JOB_ALERTS);
   }
+  { uint8_t style; if (renderer::consumeDemoSound(style)) audio_out::chime((ChimeStyle)style, true); }
   if (now - lastSecond >= 1000) {
     lastSecond = now;
     alerts::expire(time(nullptr));

@@ -262,9 +262,10 @@ IP address once online). After every WiFi connection the IP address is shown for
 
 The Status tab has a demo switch that cycles the panel through sample scenarios eight seconds each: sunny, rain, snow,
 thunderstorm, lightning, wind, high/low, sun times, the forecast and hourly screens, a tornado warning and a winter
-storm watch, an alarm, a timer, a message, the holiday themes and night mode. It uses made-up data, plays no sound,
-turns itself off after the chosen number of minutes, and the wheel push ends it early. Scripts can use
-`POST /api/demo?on=1&minutes=10`.
+storm watch, an alarm, a running and a finished timer, a message, the holiday themes and night mode. It uses made-up
+data, turns itself off after the chosen number of minutes, and the wheel push ends it early. It is silent unless
+"with sounds" is ticked, in which case the alert, lightning, alarm, timer and message scenarios play their chimes even
+during quiet hours. Scripts can use `POST /api/demo?on=1&minutes=10&sound=1`.
 
 ## Alerts in detail
 

@@ -1,6 +1,6 @@
 {
   "name": "Matrix Clock",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "new_install_prompt_erase": true,
   "new_install_improv_wait_time": 0,
   "builds": [
@@ -8,13 +8,13 @@
       "chipFamily": "ESP32-S3",
       "parts": [
         {
-          "path": "matrix-clock-0.3.2-factory.bin",
+          "path": "matrix-clock-0.3.3-factory.bin",
           "offset": 0
         }
       ]
     }
   ],
-  "ota": "matrix-clock-0.3.2-ota.bin",
-  "ota_size": 1512592,
-  "ota_md5": "18a4552631441a0701451d7308bd6dd3"
+  "ota": "matrix-clock-0.3.3-ota.bin",
+  "ota_size": 1513040,
+  "ota_md5": "882d62304d60215e17ef374f9b90b78f"
 }

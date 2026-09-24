@@ -123,6 +123,7 @@ namespace web {
       JsonObject dm = root["demo"].to<JsonObject>();
       dm["on"] = renderer::demoActive();
       dm["scenario"] = renderer::demoScenario();
+      dm["sound"] = renderer::demoSound();
       dm["remaining_s"] = renderer::demoRemainingSec();
       updater::Status us = updater::status();
       JsonObject up = root["update"].to<JsonObject>();
@@ -318,7 +319,8 @@ namespace web {
       };
       bool on = param("on", "1") != "0" && param("on", "1") != "false";
       long minutes = param("minutes", "10").toInt();
-      renderer::setDemo(on, (uint32_t)constrain(minutes, 1L, 720L) * 60000UL);
+      bool sound = param("sound", "0") == "1" || param("sound", "0") == "true";
+      renderer::setDemo(on, (uint32_t)constrain(minutes, 1L, 720L) * 60000UL, sound);
       r->send(200, "application/json", on ? "{\"ok\":true,\"demo\":true}" : "{\"ok\":true,\"demo\":false}");
     });
     server.on("/api/update/check", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestCheck(); r->send(200, "application/json", "{\"ok\":true}"); });

@@ -62,7 +62,9 @@ namespace renderer {
       lightning::Status ls;
       const themes::Theme* theme = nullptr;
       bool night = false, ringing = false, ringTimer = false, timer = false, lightningPage = false;
-      uint32_t timerEnd = 0;
+      bool sound = false, soundPending = false;
+      uint8_t soundStyle = 0;
+      uint32_t timerEnd = 0, lastRing = 0;
       uint8_t page = 255;          // 255 = rotate normally
       Screen screen = Screen::Composite;
       const char* name = "";
@@ -377,20 +379,24 @@ namespace renderer {
                  demoAlert("Winter Storm Watch", "Winter Storm Watch from Friday evening through Saturday afternoon", Severity::Moderate, false, now); break;
         case 13: demo.name = "alarm";      demo.ringing = true; break;
         case 14: demo.name = "timer";      demo.timer = true; demo.timerEnd = now + 754000UL; break;
-        case 15: demo.name = "message";    showMessage("Demo mode - messages scroll here", DEMO_STEP_MS, 0x40C0FF); break;
-        case 16: demo.name = "christmas";  demo.wx = demoWeather(3, true, 34, 28, 70, 8, 12, 10); demo.theme = themes::forDate(themes::sample(themes::Sample::Christmas)); demo.page = PAGE_DATE; break;
-        case 17: demo.name = "july 4th";   demo.wx = demoWeather(0, true, 88, 90, 35, 6, 10, 180); demo.theme = themes::forDate(themes::sample(themes::Sample::July4)); demo.page = PAGE_DATE; break;
-        case 18: demo.name = "valentine";  demo.theme = themes::forDate(themes::sample(themes::Sample::Valentine)); demo.page = PAGE_TEMP; break;
-        case 19: demo.name = "halloween";  demo.wx = demoWeather(2, false, 52, 49, 60, 5, 9, 90); demo.theme = themes::forDate(themes::sample(themes::Sample::Halloween)); demo.page = PAGE_DATE; break;
-        case 20: demo.name = "night mode"; demo.night = true; break;
+        case 15: demo.name = "timer done"; demo.ringing = true; demo.ringTimer = true; break;
+        case 16: demo.name = "message";    showMessage("Demo mode - messages scroll here", DEMO_STEP_MS, 0x40C0FF); break;
+        case 17: demo.name = "christmas";  demo.wx = demoWeather(3, true, 34, 28, 70, 8, 12, 10); demo.theme = themes::forDate(themes::sample(themes::Sample::Christmas)); demo.page = PAGE_DATE; break;
+        case 18: demo.name = "july 4th";   demo.wx = demoWeather(0, true, 88, 90, 35, 6, 10, 180); demo.theme = themes::forDate(themes::sample(themes::Sample::July4)); demo.page = PAGE_DATE; break;
+        case 19: demo.name = "valentine";  demo.theme = themes::forDate(themes::sample(themes::Sample::Valentine)); demo.page = PAGE_TEMP; break;
+        case 20: demo.name = "halloween";  demo.wx = demoWeather(2, false, 52, 49, 60, 5, 9, 90); demo.theme = themes::forDate(themes::sample(themes::Sample::Halloween)); demo.page = PAGE_DATE; break;
+        case 21: demo.name = "night mode"; demo.night = true; break;
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
+      // sounds that a real event would produce (alert chime, lightning chime, message chime); alarms repeat in tick()
+      if (demo.sound && (i == 5 || i == 11 || i == 16)) { demo.soundPending = true; demo.soundStyle = (uint8_t)g_cfg.audio.chime; }
+      demo.lastRing = 0;
       if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; }
       else if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
       pageSince = now;
       transFrom = 255;
     }
-    constexpr uint8_t DEMO_COUNT = 21;
+    constexpr uint8_t DEMO_COUNT = 22;
 
     // copies the page canvas into the bottom half; black is transparent so effects show behind the content
     void blitBottom(Canvas& c, const Canvas& pc, int16_t dx) {
@@ -555,12 +561,19 @@ namespace renderer {
     if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
   }
 
-  void setDemo(bool on, uint32_t total_ms) {
+  void setDemo(bool on, uint32_t total_ms, bool sound) {
     uint32_t now = millis();
-    if (on) { demo.on = true; demo.endAt = now + (total_ms ? total_ms : 10 * 60000UL); demoApply(0, now); demo.nextAt = now + DEMO_STEP_MS; }
-    else if (demo.on) { demo.on = false; demo.theme = nullptr; clearMessage(); screen = Screen::Composite; transFrom = 255; lastSlow = 0; lastBri = 0; }
+    if (on) { demo.on = true; demo.sound = sound; demo.endAt = now + (total_ms ? total_ms : 10 * 60000UL); demoApply(0, now); demo.nextAt = now + DEMO_STEP_MS; }
+    else if (demo.on) { demo.on = false; demo.soundPending = false; demo.theme = nullptr; clearMessage(); screen = Screen::Composite; transFrom = 255; lastSlow = 0; lastBri = 0; }
   }
   bool demoActive() { return demo.on; }
+  bool demoSound() { return demo.on && demo.sound; }
+  bool consumeDemoSound(uint8_t& style) {
+    if (!demo.on || !demo.soundPending) return false;
+    demo.soundPending = false;
+    style = demo.soundStyle;
+    return true;
+  }
   const char* demoScenario() { return demo.on ? demo.name : ""; }
   uint32_t demoRemainingSec() { if (!demo.on) return 0; int32_t d = (int32_t)(demo.endAt - millis()); return d > 0 ? (uint32_t)d / 1000 : 0; }
 
@@ -592,6 +605,9 @@ namespace renderer {
     }
     if (lightning::consumeStrikeEvent()) { strikeFlashUntil = now + 220; strikeX = 6 + random(W - 12); }
     if (demo.on && demo.lightningPage && now - demo.lastStrike > 3000) { demo.lastStrike = now; strikeFlashUntil = now + 220; strikeX = 6 + random(W - 12); }
+    if (demo.on && demo.sound && demo.ringing && (demo.lastRing == 0 || now - demo.lastRing >= 6000)) {   // alarm / timer-done repeat
+      demo.lastRing = now; demo.soundPending = true; demo.soundStyle = (uint8_t)ChimeStyle::TripleBeep;
+    }
     struct tm lt = {};
     uint16_t ms = 0;
     const bool timeValid = timesvc::localNow(lt, &ms);
