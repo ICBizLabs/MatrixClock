@@ -48,9 +48,12 @@ arrives, and is configured entirely through its own web interface.
 | Speaker (optional) | 4-8 ohm on the board's speaker connector, needed for the chime |
 | CR1220 / LIR battery (optional) | On the SH1.0 connector to keep the RTC running without power |
 
-**Where the parts came from:** the controller is the [Seengreat RGB Matrix HUB75 S3 on Amazon](https://www.amazon.com/dp/B0H69DTZVH); the panel is this P4 256x128 mm module.
+**Where the parts came from**
 
-<a href="https://s.click.aliexpress.com/e/_c3olggmN"><img src="https://ae-pic-a1.aliexpress-media.com/kf/S68fe89304a9f4e888e5167fd0c0d50d3P.jpg_350x350.jpg" width="260" alt="P4 64x32 HUB75 LED matrix panel on AliExpress"></a>
+| Controller | Panel |
+|---|---|
+| <a href="https://www.amazon.com/dp/B0H69DTZVH"><img src="https://m.media-amazon.com/images/I/61VzwaWpPfL._AC_SL350_.jpg" width="260" alt="Seengreat RGB Matrix HUB75 S3 controller board on Amazon"></a> | <a href="https://s.click.aliexpress.com/e/_c3olggmN"><img src="https://ae-pic-a1.aliexpress-media.com/kf/S68fe89304a9f4e888e5167fd0c0d50d3P.jpg_350x350.jpg" width="260" alt="P4 64x32 HUB75 LED matrix panel on AliExpress"></a> |
+| [Seengreat RGB Matrix HUB75 S3 (Amazon)](https://www.amazon.com/dp/B0H69DTZVH) | [P4 256x128 mm 64x32 module (AliExpress)](https://s.click.aliexpress.com/e/_c3olggmN) |
 
 ### Wiring
 
