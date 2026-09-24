@@ -241,6 +241,14 @@ In **night mode** the panel dims to the configured level and hides the weather, 
 Before the time is known the bottom half shows the connection state (`WIFI...`, `SETUP WIFI` with `4.3.2.1`, or the
 IP address once online). After every WiFi connection the IP address is shown for 20 seconds (Display tab).
 
+## Demo mode
+
+The Status tab has a demo switch that cycles the panel through sample scenarios eight seconds each: sunny, rain, snow,
+thunderstorm, lightning, wind, high/low, sun times, the forecast and hourly screens, a tornado warning and a winter
+storm watch, an alarm, a timer, a message, the holiday themes and night mode. It uses made-up data, plays no sound,
+turns itself off after the chosen number of minutes, and the wheel push ends it early. Scripts can use
+`POST /api/demo?on=1&minutes=10`.
+
 ## Alerts in detail
 
 - Polled every 2 minutes (configurable, minimum 60 s) from

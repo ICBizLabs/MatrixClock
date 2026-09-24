@@ -11,4 +11,6 @@ namespace themes {
     Deco deco;
   };
   const Theme* forDate(const struct tm& lt);   // nullptr when today is not a holiday
+  enum class Sample : uint8_t { Christmas, July4, Valentine, Halloween };
+  struct tm sample(Sample s);                   // a date on which that theme is active (demo mode)
 }

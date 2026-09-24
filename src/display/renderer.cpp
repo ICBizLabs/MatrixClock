@@ -52,6 +52,23 @@ namespace renderer {
     bool night = false;
     const themes::Theme* theme = nullptr;
 
+    // ---- demo mode: synthetic data replaces the live data while the scenarios cycle ----
+    struct Demo {
+      bool on = false;
+      uint8_t idx = 0;
+      uint32_t nextAt = 0, endAt = 0, lastStrike = 0;
+      WeatherData wx;
+      AlertView av;
+      lightning::Status ls;
+      const themes::Theme* theme = nullptr;
+      bool night = false, ringing = false, ringTimer = false, timer = false, lightningPage = false;
+      uint32_t timerEnd = 0;
+      uint8_t page = 255;          // 255 = rotate normally
+      Screen screen = Screen::Composite;
+      const char* name = "";
+    } demo;
+    constexpr uint32_t DEMO_STEP_MS = 8000;
+
     struct { String text; uint32_t until = 0; uint16_t color = 0xFFFF; bool active = false; } msg;   // written from other tasks
     SemaphoreHandle_t msgMtx = nullptr;
     bool lockMsg() { return msgMtx && xSemaphoreTake(msgMtx, pdMS_TO_TICKS(50)) == pdTRUE; }
@@ -293,23 +310,87 @@ namespace renderer {
       msgScroll.setText(text.c_str(), 22, now);
       msgScroll.draw(pc, 0, Y_BANNER, W, color, now, true);
     }
-    void drawTimer(Canvas& pc) {
+    void drawTimer(Canvas& pc, uint32_t s) {
       classicFont(pc);
-      uint32_t s = alarmclock::timerRemainingSec();
       char t[16];
       if (s >= 3600) snprintf(t, sizeof(t), "%lu:%02lu:%02lu", (unsigned long)(s / 3600), (unsigned long)(s % 3600 / 60), (unsigned long)(s % 60));
       else snprintf(t, sizeof(t), "%lu:%02lu", (unsigned long)(s / 60), (unsigned long)(s % 60));
       pc.drawTextCentered("TIMER", W / 2, Y_L1, colDate());
       pc.drawTextCentered(t, W / 2, Y_L2, colText());
     }
-    void drawRing(Canvas& pc, uint32_t now) {
+    void drawRing(Canvas& pc, uint32_t now, bool timer, const char* label) {
       classicFont(pc);
       const bool on = (now / 500) & 1;
-      const bool timer = alarmclock::ringingIsTimer();
       pc.drawTextCentered(timer ? "TIMER" : "ALARM", W / 2, Y_L1, on ? C_ORANGE : 0xFFFF);
-      const char* label = alarmclock::ringingLabel();
       pc.drawTextCentered(timer ? "DONE" : (label && *label ? label : "WAKE UP"), W / 2, Y_L2, colText());
     }
+
+    // ---- demo scenarios ----
+    WeatherData demoWeather(uint8_t wmo, bool day, float temp, float feels, float hum, float wind, float gust, int16_t dir) {
+      WeatherData w;
+      w.valid = true; w.imperial = g_cfg.weather.imperial; w.fetched_ms = millis();
+      auto tc = [&](float f) { return w.imperial ? f : (f - 32.0f) * 5.0f / 9.0f; };
+      w.cur.wmo = wmo; w.cur.is_day = day; w.cur.temp = tc(temp); w.cur.feels = tc(feels); w.cur.humidity = hum;
+      w.cur.wind = w.imperial ? wind : wind * 1.609f; w.cur.gust = w.imperial ? gust : gust * 1.609f; w.cur.wind_dir = dir;
+      const char* dates[3] = { "2026-09-24", "2026-09-25", "2026-09-26" };
+      const uint8_t codes[3] = { 0, 2, 61 }; const float hi[3] = { 75, 71, 64 }, lo[3] = { 55, 52, 49 }; const uint8_t pop[3] = { 5, 20, 70 };
+      for (int i = 0; i < 3; i++) { strlcpy(w.daily[i].date, dates[i], sizeof(w.daily[i].date)); w.daily[i].wmo = codes[i]; w.daily[i].tmax = tc(hi[i]); w.daily[i].tmin = tc(lo[i]); w.daily[i].pop = pop[i]; }
+      w.ndaily = 3;
+      const float ht[12] = { 72, 74, 75, 73, 70, 66, 63, 61, 59, 58, 57, 56 }; const uint8_t hp[12] = { 0, 0, 5, 10, 20, 35, 55, 60, 40, 20, 10, 5 };
+      for (int i = 0; i < 12; i++) { w.hourly[i].hour = (int8_t)((14 + i) % 24); w.hourly[i].temp = tc(ht[i]); w.hourly[i].pop = hp[i]; }
+      w.nhourly = 12;
+      w.sunrise_min = 6 * 60 + 48; w.sunset_min = 18 * 60 + 55;
+      return w;
+    }
+    void demoAlert(const char* event, const char* headline, Severity sev, bool fresh, uint32_t now) {
+      demo.av = AlertView();
+      demo.av.n = 1;
+      strlcpy(demo.av.items[0].event, event, sizeof(demo.av.items[0].event));
+      strlcpy(demo.av.items[0].headline, headline, sizeof(demo.av.items[0].headline));
+      demo.av.items[0].sev = sev; demo.av.items[0].first_seen_ms = fresh ? now : now - 120000UL;
+      demo.av.top = sev; demo.av.newest_ms = fresh ? now : 0;
+    }
+    void demoApply(uint8_t i, uint32_t now) {
+      demo.idx = i;
+      demo.av = AlertView(); demo.ls = lightning::Status(); demo.theme = nullptr;
+      demo.night = demo.ringing = demo.ringTimer = demo.timer = demo.lightningPage = false;
+      demo.page = 255; demo.screen = Screen::Composite;
+      demo.wx = demoWeather(0, true, 72, 70, 46, 12, 19, 315);
+      clearMessage();
+      switch (i) {
+        case 0:  demo.name = "sunny";      demo.page = PAGE_TEMP; break;
+        case 1:  demo.name = "date";       demo.page = PAGE_DATE; break;
+        case 2:  demo.name = "rain";       demo.wx = demoWeather(63, true, 58, 55, 91, 9, 14, 200); demo.page = PAGE_COND; break;
+        case 3:  demo.name = "snow";       demo.wx = demoWeather(73, true, 28, 19, 88, 11, 18, 350); demo.page = PAGE_TEMP; break;
+        case 4:  demo.name = "thunder";    demo.wx = demoWeather(95, true, 68, 70, 80, 22, 41, 240); demo.page = PAGE_COND; break;
+        case 5:  demo.name = "lightning";  demo.wx = demoWeather(95, true, 70, 72, 82, 18, 33, 250);
+                 demo.ls.enabled = demo.ls.connected = demo.ls.active = true; demo.ls.count = 4; demo.ls.nearest_km = 9.4f; demo.ls.latest_km = 12.9f;
+                 demo.ls.latest_bearing = 300; demo.ls.latest_time = time(nullptr) - 120; demo.lightningPage = true; break;
+        case 6:  demo.name = "wind";       demo.wx = demoWeather(2, true, 66, 61, 40, 27, 38, 290); demo.page = PAGE_WIND; break;
+        case 7:  demo.name = "high-low";   demo.page = PAGE_HILO; break;
+        case 8:  demo.name = "sun";        demo.page = PAGE_SUN; break;
+        case 9:  demo.name = "forecast";   demo.screen = Screen::Forecast; break;
+        case 10: demo.name = "hourly";     demo.screen = Screen::Hourly; break;
+        case 11: demo.name = "tornado warning"; demo.wx = demoWeather(95, true, 74, 76, 78, 30, 55, 210);
+                 demoAlert("Tornado Warning", "Tornado Warning until 5:00 PM by NWS - take shelter now", Severity::Extreme, true, now); break;
+        case 12: demo.name = "winter storm watch"; demo.wx = demoWeather(71, true, 30, 22, 84, 14, 22, 20);
+                 demoAlert("Winter Storm Watch", "Winter Storm Watch from Friday evening through Saturday afternoon", Severity::Moderate, false, now); break;
+        case 13: demo.name = "alarm";      demo.ringing = true; break;
+        case 14: demo.name = "timer";      demo.timer = true; demo.timerEnd = now + 754000UL; break;
+        case 15: demo.name = "message";    showMessage("Demo mode - messages scroll here", DEMO_STEP_MS, 0x40C0FF); break;
+        case 16: demo.name = "christmas";  demo.wx = demoWeather(3, true, 34, 28, 70, 8, 12, 10); demo.theme = themes::forDate(themes::sample(themes::Sample::Christmas)); demo.page = PAGE_DATE; break;
+        case 17: demo.name = "july 4th";   demo.wx = demoWeather(0, true, 88, 90, 35, 6, 10, 180); demo.theme = themes::forDate(themes::sample(themes::Sample::July4)); demo.page = PAGE_DATE; break;
+        case 18: demo.name = "valentine";  demo.theme = themes::forDate(themes::sample(themes::Sample::Valentine)); demo.page = PAGE_TEMP; break;
+        case 19: demo.name = "halloween";  demo.wx = demoWeather(2, false, 52, 49, 60, 5, 9, 90); demo.theme = themes::forDate(themes::sample(themes::Sample::Halloween)); demo.page = PAGE_DATE; break;
+        case 20: demo.name = "night mode"; demo.night = true; break;
+        default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
+      }
+      if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; }
+      else if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
+      pageSince = now;
+      transFrom = 255;
+    }
+    constexpr uint8_t DEMO_COUNT = 21;
 
     // copies the page canvas into the bottom half; black is transparent so effects show behind the content
     void blitBottom(Canvas& c, const Canvas& pc, int16_t dx) {
@@ -393,7 +474,7 @@ namespace renderer {
     uint8_t decideBrightness(const struct tm& lt, bool timeValid) {
       const DisplayConfig& d = g_cfg.display;
       uint16_t nowMin = (uint16_t)(lt.tm_hour * 60 + lt.tm_min);
-      night = timeValid && d.night.enabled && in_window(d.night.start, d.night.end, nowMin);
+      night = demo.on ? demo.night : (timeValid && d.night.enabled && in_window(d.night.start, d.night.end, nowMin));
       uint8_t level = d.brightness;
       if (night) level = d.night.level;
       else if (timeValid && d.schedule.enabled) {
@@ -474,6 +555,15 @@ namespace renderer {
     if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
   }
 
+  void setDemo(bool on, uint32_t total_ms) {
+    uint32_t now = millis();
+    if (on) { demo.on = true; demo.endAt = now + (total_ms ? total_ms : 10 * 60000UL); demoApply(0, now); demo.nextAt = now + DEMO_STEP_MS; }
+    else if (demo.on) { demo.on = false; demo.theme = nullptr; clearMessage(); screen = Screen::Composite; transFrom = 255; lastSlow = 0; lastBri = 0; }
+  }
+  bool demoActive() { return demo.on; }
+  const char* demoScenario() { return demo.on ? demo.name : ""; }
+  uint32_t demoRemainingSec() { if (!demo.on) return 0; int32_t d = (int32_t)(demo.endAt - millis()); return d > 0 ? (uint32_t)d / 1000 : 0; }
+
   bool nightActive() { return night; }
   uint8_t effectiveBrightness() { return lastBri; }
   const char* themeName() { return theme ? theme->name : ""; }
@@ -483,23 +573,29 @@ namespace renderer {
       case Screen::Forecast: return "forecast";
       case Screen::Hourly: return "hourly";
       case Screen::Test: return "test";
-      default: return alarmclock::ringing() ? "alarm" : av.n ? "alert" : msg.active ? "message" : "clock";
+      default: return demo.on ? "demo" : alarmclock::ringing() ? "alarm" : av.n ? "alert" : msg.active ? "message" : "clock";
     }
   }
 
   void tick(Canvas& c, uint32_t now) {
+    if (demo.on) {
+      if ((int32_t)(now - demo.endAt) >= 0) setDemo(false, 0);
+      else if ((int32_t)(now - demo.nextAt) >= 0) { demoApply((uint8_t)((demo.idx + 1) % DEMO_COUNT), now); demo.nextAt = now + DEMO_STEP_MS; }
+    }
     if (now - lastSlow >= 500) {
       lastSlow = now;
       shared::getWeather(wx);
       alerts::view(g_cfg.alerts, av);
       ls = lightning::status();
+      if (demo.on) { wx = demo.wx; av = demo.av; ls = demo.ls; }
       if (msg.active && msg.until && (int32_t)(now - msg.until) >= 0) clearMessage();
     }
     if (lightning::consumeStrikeEvent()) { strikeFlashUntil = now + 220; strikeX = 6 + random(W - 12); }
+    if (demo.on && demo.lightningPage && now - demo.lastStrike > 3000) { demo.lastStrike = now; strikeFlashUntil = now + 220; strikeX = 6 + random(W - 12); }
     struct tm lt = {};
     uint16_t ms = 0;
     const bool timeValid = timesvc::localNow(lt, &ms);
-    theme = (timeValid && g_cfg.display.holiday_themes) ? themes::forDate(lt) : nullptr;
+    theme = demo.on ? demo.theme : ((timeValid && g_cfg.display.holiday_themes) ? themes::forDate(lt) : nullptr);
 
     uint8_t bri = decideBrightness(lt, timeValid);
     if (bri != lastBri) { panel::setBrightness(bri); lastBri = bri; }
@@ -522,10 +618,11 @@ namespace renderer {
     }
 
     const DisplayConfig& d = g_cfg.display;
-    const bool ringing = alarmclock::ringing();
+    const bool ringing = alarmclock::ringing() || (demo.on && demo.ringing);
+    const bool timerRun = alarmclock::timerRunning() || (demo.on && demo.timer);
     const bool alert = av.n > 0;
     const bool alertFresh = alert && av.newest_ms && g_cfg.alerts.flash_frame_sec && now - av.newest_ms < (uint32_t)g_cfg.alerts.flash_frame_sec * 1000UL;
-    const bool interrupt = ringing || alertFresh || msg.active || alarmclock::timerRunning();   // blocks the full screens
+    const bool interrupt = ringing || alertFresh || msg.active || timerRun;   // blocks the full screens
 
     // an active full screen (forecast / hourly graph) owns the panel until its time is up
     if (screen == Screen::Forecast || screen == Screen::Hourly) {
@@ -535,8 +632,8 @@ namespace renderer {
       transFrom = 255;
     }
 
-    // page rotation (and the full-screen forecast / hourly graph every few cycles)
-    if (now - pageSince >= (uint32_t)d.page_sec * 1000UL) {
+    // page rotation (and the full-screen forecast / hourly graph every few cycles); demo mode pins its own page
+    if (!demo.on && now - pageSince >= (uint32_t)d.page_sec * 1000UL) {
       pageSince = now;
       if (ls.active && !showLightningPage && !lightningTurn) {
         startTransition(d.pages[pageIdx < d.npages ? pageIdx : 0], false, now);
@@ -593,16 +690,16 @@ namespace renderer {
     Canvas& pc = *pageB;
     pc.fillScreen(0);
     bool slide = false;
-    if (ringing) drawRing(pc, now);
+    if (ringing) drawRing(pc, now, demo.on && demo.ringing ? demo.ringTimer : alarmclock::ringingIsTimer(), demo.on && demo.ringing ? "DEMO" : alarmclock::ringingLabel());
     else if (alert) drawBanner(pc, now);
     else if (msg.active) drawMessage(pc, now);
-    else if (alarmclock::timerRunning()) drawTimer(pc);
-    else if (ipUntil && (int32_t)(now - ipUntil) < 0 && wifi_mgr::isConnected()) drawIp(pc);
-    else if (!timeValid) drawStatusLine(pc);
+    else if (timerRun) drawTimer(pc, demo.on && demo.timer ? (uint32_t)max<int32_t>(0, (int32_t)(demo.timerEnd - now)) / 1000 : alarmclock::timerRemainingSec());
+    else if (!demo.on && ipUntil && (int32_t)(now - ipUntil) < 0 && wifi_mgr::isConnected()) drawIp(pc);
+    else if (!timeValid && !demo.on) drawStatusLine(pc);
     else if (night && d.night.hide_bottom) { /* dark */ }
     else {
-      if (showLightningPage && ls.active) drawLightningPage(pc);
-      else drawPage(pc, d.pages[pageIdx < d.npages ? pageIdx : 0], lt, timeValid, now);
+      if ((demo.on && demo.lightningPage) || (showLightningPage && ls.active)) drawLightningPage(pc);
+      else drawPage(pc, demo.on && demo.page != 255 ? demo.page : d.pages[pageIdx < d.npages ? pageIdx : 0], lt, timeValid, now);
       slide = transFrom != 255 && (int32_t)(now - (transStart + TRANS_MS)) < 0;
     }
     if (slide) {

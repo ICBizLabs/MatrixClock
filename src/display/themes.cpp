@@ -22,6 +22,18 @@ namespace themes {
     }
   }
 
+  struct tm sample(Sample s) {
+    struct tm t = {};
+    t.tm_year = 2026 - 1900; t.tm_mday = 1;
+    switch (s) {
+      case Sample::Christmas: t.tm_mon = 11; t.tm_mday = 25; break;
+      case Sample::July4: t.tm_mon = 6; t.tm_mday = 4; break;
+      case Sample::Valentine: t.tm_mon = 1; t.tm_mday = 14; break;
+      case Sample::Halloween: t.tm_mon = 9; t.tm_mday = 31; break;
+    }
+    return t;
+  }
+
   const Theme* forDate(const struct tm& lt) {
     const int mon = lt.tm_mon + 1, day = lt.tm_mday, year = lt.tm_year + 1900;
     if (mon == 1 && day == 1) return &NEW_YEAR;

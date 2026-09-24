@@ -19,6 +19,10 @@ namespace renderer {
   String messageText();
   uint32_t messageRemainingSec();
   void nextPage();
+  void setDemo(bool on, uint32_t total_ms = 10 * 60000UL);   // cycle through demo scenarios (synthetic data), auto-off
+  bool demoActive();
+  const char* demoScenario();
+  uint32_t demoRemainingSec();
   bool nightActive();
   uint8_t effectiveBrightness();
   const char* screenName();

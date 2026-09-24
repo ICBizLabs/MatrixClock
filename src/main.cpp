@@ -46,6 +46,7 @@ static void onButton(uint8_t key, bool longPress) {
     case buttons::K1: if (longPress) renderer::requestTest(10000); else renderer::nextPage(); break;
     case buttons::K2:
       if (longPress) audio_out::chime(g_cfg.audio.chime, true);
+      else if (renderer::demoActive()) renderer::setDemo(false);
       else if (renderer::hasMessage()) renderer::clearMessage();
       else alerts::acknowledge("all");
       break;

@@ -120,6 +120,10 @@ namespace web {
       lg["total"] = lst.total;
       sys["theme"] = renderer::themeName();
       sys["full_screen_block"] = renderer::fullScreenBlockReason();
+      JsonObject dm = root["demo"].to<JsonObject>();
+      dm["on"] = renderer::demoActive();
+      dm["scenario"] = renderer::demoScenario();
+      dm["remaining_s"] = renderer::demoRemainingSec();
       updater::Status us = updater::status();
       JsonObject up = root["update"].to<JsonObject>();
       up["state"] = updater::stateName(us.state);
@@ -306,6 +310,17 @@ namespace web {
       r->send(200, "application/json", "{\"ok\":true}");
     });
     server.on("/api/frame", HTTP_GET, handleFrame);
+    server.on("/api/demo", HTTP_POST, [](AsyncWebServerRequest* r) {
+      auto param = [&](const char* n, const char* def) -> String {
+        if (r->hasParam(n, true)) return r->getParam(n, true)->value();
+        if (r->hasParam(n)) return r->getParam(n)->value();
+        return def;
+      };
+      bool on = param("on", "1") != "0" && param("on", "1") != "false";
+      long minutes = param("minutes", "10").toInt();
+      renderer::setDemo(on, (uint32_t)constrain(minutes, 1L, 720L) * 60000UL);
+      r->send(200, "application/json", on ? "{\"ok\":true,\"demo\":true}" : "{\"ok\":true,\"demo\":false}");
+    });
     server.on("/api/update/check", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestCheck(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/update/install", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestInstall(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/show", HTTP_POST, [](AsyncWebServerRequest* r) {
