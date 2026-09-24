@@ -6,7 +6,9 @@
 namespace {
   const char* const SEVERITY_NAMES[] = { "Unknown", "Minor", "Moderate", "Severe", "Extreme" };
   const char* const PAGE_NAMES[] = { "date", "temp", "cond", "wind", "hilo", "feels", "sun" };
-  const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp" };
+  const char* const CHIME_NAMES[] = { "none", "two_tone", "triple_beep", "chirp", "eas_attention", "eas_full", "nws_1050",
+                                      "siren_wail", "siren_yelp", "siren_hilo", "alarm_beeps", "doorbell", "sos", "arpeggio", "sonar" };
+  constexpr uint8_t CHIME_COUNT = (uint8_t)ChimeStyle::COUNT;
   const char* const DRIVER_NAMES[] = { "SHIFTREG", "FM6124", "FM6126A", "ICN2038S", "MBI5124", "DP3246" };
 
   bool nameLookup(const char* const* names, size_t n, const char* s, uint8_t& out) {
@@ -104,8 +106,8 @@ const char* severity_name(Severity s) { uint8_t i = (uint8_t)s; return i < 5 ? S
 bool severity_parse(const char* s, Severity& out) { uint8_t i; if (!nameLookup(SEVERITY_NAMES, 5, s, i)) return false; out = (Severity)i; return true; }
 const char* page_name(uint8_t id) { return id < PAGE_COUNT ? PAGE_NAMES[id] : "?"; }
 bool page_parse(const char* s, uint8_t& out) { return nameLookup(PAGE_NAMES, PAGE_COUNT, s, out); }
-const char* chime_name(ChimeStyle c) { uint8_t i = (uint8_t)c; return i < 4 ? CHIME_NAMES[i] : "none"; }
-bool chime_parse(const char* s, ChimeStyle& out) { uint8_t i; if (!nameLookup(CHIME_NAMES, 4, s, i)) return false; out = (ChimeStyle)i; return true; }
+const char* chime_name(ChimeStyle c) { uint8_t i = (uint8_t)c; return i < CHIME_COUNT ? CHIME_NAMES[i] : "none"; }
+bool chime_parse(const char* s, ChimeStyle& out) { uint8_t i; if (!nameLookup(CHIME_NAMES, CHIME_COUNT, s, i)) return false; out = (ChimeStyle)i; return true; }
 const char* panel_driver_name(uint8_t d) { return d < PANEL_DRIVER_COUNT ? DRIVER_NAMES[d] : DRIVER_NAMES[0]; }
 bool panel_driver_parse(const char* s, uint8_t& out) { return nameLookup(DRIVER_NAMES, PANEL_DRIVER_COUNT, s, out); }
 
@@ -290,6 +292,11 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     JsonVariantConst ch = o["chime"];
     if (!ch.isNull()) {
       if (!chime_parse(ch.as<const char*>(), a.chime)) { err = "chime: unknown style"; return false; }
+      t = true;
+    }
+    JsonVariantConst chx = o["chime_extreme"];
+    if (!chx.isNull()) {
+      if (!chime_parse(chx.as<const char*>(), a.chime_extreme)) { err = "chime_extreme: unknown style"; return false; }
       t = true;
     }
     if (!getNum(o, "repeat_min", a.repeat_min, t, err, 0, 120)) return false;
@@ -484,6 +491,7 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["enabled"] = a.enabled;
   o["volume"] = a.volume;
   o["chime"] = chime_name(a.chime);
+  o["chime_extreme"] = chime_name(a.chime_extreme);
   o["repeat_min"] = a.repeat_min;
   JsonObject q = o["quiet"].to<JsonObject>();
   q["enabled"] = a.quiet.enabled;

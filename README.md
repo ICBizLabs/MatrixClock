@@ -21,8 +21,10 @@ arrives, and is configured entirely through its own web interface.
   coordinates: severity-coloured scrolling banner (red for Extreme/Severe, orange Moderate, yellow Minor), a flashing
   frame for the first minute, automatic expiry, cancellation and de-duplication of updates, a severity filter and an
   ignore list for event types you do not care about.
-- **Chime** on new alerts through the ES8311 codec and speaker connector: three tone patterns, volume, quiet hours,
-  optional repeat while an alert stays unacknowledged.
+- **Sounds** through the ES8311 codec and speaker connector: fourteen synthesized patterns, from a gentle two-tone
+  chime, doorbell and arpeggio to alarm-clock beeps, three sirens, the NOAA 1050 Hz warning tone and a simulation of
+  the EAS attention signal (with or without the SAME data bursts). Extreme alerts such as tornado warnings get their
+  own sound; volume, quiet hours and optional repeats while an alert stays unacknowledged.
 - **Display control**: manual brightness, day/night schedule, night mode (very dim, clock only), gamma, colours,
   page order and timing.
 - **Web UI** with setup access point and captive portal, mDNS (`matrixclock.local`), REST API, WiFi scanner,

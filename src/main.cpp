@@ -120,7 +120,9 @@ void loop() {
   if (now - lastSecond >= 1000) {
     lastSecond = now;
     alerts::expire(time(nullptr));
-    if (alerts::takeNewForChime(g_cfg.alerts, g_cfg.audio.repeat_min, now)) audio_out::chime(g_cfg.audio.chime, false);
+    Severity fired;
+    if (alerts::takeNewForChime(g_cfg.alerts, g_cfg.audio.repeat_min, now, &fired))
+      audio_out::chime(fired == Severity::Extreme ? g_cfg.audio.chime_extreme : g_cfg.audio.chime, false);
     alarmclock::loop(now);
     if (lightning::consumeChimeEvent()) audio_out::chime(g_cfg.audio.chime, false);
     if (lightning::consumeNotifyEvent() && g_cfg.pushbullet.notify_lightning && g_cfg.pushbullet.token[0]) {

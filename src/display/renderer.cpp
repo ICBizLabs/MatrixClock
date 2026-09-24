@@ -389,7 +389,7 @@ namespace renderer {
         default: demo.name = "sunny"; demo.page = PAGE_TEMP; break;
       }
       // sounds that a real event would produce (alert chime, lightning chime, message chime); alarms repeat in tick()
-      if (demo.sound && (i == 5 || i == 11 || i == 16)) { demo.soundPending = true; demo.soundStyle = (uint8_t)g_cfg.audio.chime; }
+      if (demo.sound && (i == 5 || i == 11 || i == 16)) { demo.soundPending = true; demo.soundStyle = (uint8_t)(i == 11 ? g_cfg.audio.chime_extreme : g_cfg.audio.chime); }
       demo.lastRing = 0;
       if (demo.screen != Screen::Composite) { screen = demo.screen; screenUntil = now + DEMO_STEP_MS; transFrom = 255; }
       else if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;

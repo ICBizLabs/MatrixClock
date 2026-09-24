@@ -49,7 +49,7 @@ Configuration keys and defaults:
                 "night_mode": { "enabled": true, "start": "23:00", "end": "06:00", "level": 8, "hide_bottom": true },
                 "colors": { "time": "#FFFFFF", "date": "#80C0FF", "temp": "#FFD060", "text": "#C0C0C0", "hi": "#FF8060", "lo": "#60A0FF" } },
   "panel":    { "width": 64, "height": 32, "chain": 1, "driver": "SHIFTREG", "clkphase": false, "latch_blanking": 2, "i2s_speed_hz": 8000000, "min_refresh_hz": 120, "max_brightness": 255, "color_depth_bits": 8, "double_buffer": false, "swap_rb": false },
-  "audio":    { "enabled": true, "volume": 60, "chime": "two_tone", "repeat_min": 0, "quiet": { "enabled": true, "start": "22:00", "end": "07:00" } },
+  "audio":    { "enabled": true, "volume": 60, "chime": "two_tone", "chime_extreme": "eas_attention", "repeat_min": 0, "quiet": { "enabled": true, "start": "22:00", "end": "07:00" } },
   "pushbullet": { "token": "", "device_iden": "", "notify_alerts": true, "notify_min_severity": "Severe", "notify_lightning": true,
                   "notify_alarms": false, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
   "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixClock/manifest.json", "check_hours": 6 },
@@ -58,6 +58,7 @@ Configuration keys and defaults:
 ```
 
 Pages: `date`, `temp`, `cond`, `wind`, `hilo`, `feels`, `sun`. Alarm `days` is a 7-character string Monday..Sunday (`1` = on). Severities: `Unknown`, `Minor`, `Moderate`, `Severe`,
-`Extreme`. Chimes: `none`, `two_tone`, `triple_beep`, `chirp`. Drivers: `SHIFTREG`, `FM6124`, `FM6126A`,
+`Extreme`. Chimes: `none`, `two_tone`, `triple_beep`, `chirp`, `alarm_beeps`, `doorbell`, `arpeggio`, `sonar`, `sos`, `siren_hilo`, `siren_wail`,
+`siren_yelp`, `nws_1050`, `eas_attention`, `eas_full`. `audio.chime_extreme` is used for Extreme alerts, `audio.chime` for everything else. Drivers: `SHIFTREG`, `FM6124`, `FM6126A`,
 `ICN2038S`, `MBI5124`, `DP3246`. Sending `"tz_id"` without `"tz_posix"` fills the POSIX string from the built-in
 US zone table. `wifi.pass` / `wifi.ap_pass` set to `"***"` keep the stored secret.

@@ -180,16 +180,20 @@ namespace alerts {
     give();
   }
 
-  bool takeNewForChime(const AlertsConfig& cfg, uint16_t repeat_min, uint32_t now_ms) {
+  bool takeNewForChime(const AlertsConfig& cfg, uint16_t repeat_min, uint32_t now_ms, Severity* top) {
     if (!take()) return false;
     bool fire = false;
+    Severity best = Severity::Unknown;
     for (size_t i = 0; i < count_; i++) {
       AlertItem& it = items[i];
       if (it.acknowledged || !passesFilter(it, cfg) || (uint8_t)it.sev < (uint8_t)cfg.chime_min_severity) continue;
-      if (!it.chimed) { it.chimed = true; it.last_chime_ms = now_ms; fire = true; }
-      else if (repeat_min && now_ms - it.last_chime_ms >= (uint32_t)repeat_min * 60000UL) { it.last_chime_ms = now_ms; fire = true; }
+      bool f = false;
+      if (!it.chimed) { it.chimed = true; it.last_chime_ms = now_ms; f = true; }
+      else if (repeat_min && now_ms - it.last_chime_ms >= (uint32_t)repeat_min * 60000UL) { it.last_chime_ms = now_ms; f = true; }
+      if (f) { fire = true; if ((uint8_t)it.sev > (uint8_t)best) best = it.sev; }
     }
     give();
+    if (top) *top = best;
     return fire;
   }
 

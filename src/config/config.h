@@ -11,7 +11,15 @@ enum PageId : uint8_t { PAGE_DATE = 0, PAGE_TEMP, PAGE_COND, PAGE_WIND, PAGE_HIL
 const char* page_name(uint8_t id);
 bool        page_parse(const char* s, uint8_t& out);
 
-enum class ChimeStyle : uint8_t { None = 0, TwoTone, TripleBeep, Chirp };
+enum class ChimeStyle : uint8_t {
+  None = 0, TwoTone, TripleBeep, Chirp,
+  EasAttention,   // Emergency Alert System attention signal: 853 + 960 Hz dual tone, 8 s
+  EasFull,        // SAME-style data bursts, attention signal, end-of-message bursts (~19 s)
+  Nws1050,        // NOAA Weather Radio 1050 Hz warning tone, 5 s
+  SirenWail, SirenYelp, SirenHiLo,
+  AlarmBeeps, Doorbell, Sos, Arpeggio, Sonar,
+  COUNT
+};
 const char* chime_name(ChimeStyle c);
 bool        chime_parse(const char* s, ChimeStyle& out);
 
@@ -121,7 +129,8 @@ struct QuietConfig {
 struct AudioConfig {
   bool enabled = true;
   uint8_t volume = 60;          // percent
-  ChimeStyle chime = ChimeStyle::TwoTone;
+  ChimeStyle chime = ChimeStyle::TwoTone;              // alerts, lightning, messages, pushes
+  ChimeStyle chime_extreme = ChimeStyle::EasAttention; // Extreme alerts (tornado, hurricane, ...)
   uint16_t repeat_min = 0;      // re-chime interval while an unacknowledged alert stands, 0 = once
   QuietConfig quiet;
 };

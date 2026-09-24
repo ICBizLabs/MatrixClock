@@ -47,7 +47,7 @@ namespace alerts {
   void injectTest(const char* event, Severity s, const char* headline, uint16_t minutes, uint32_t now_ms);
   void acknowledge(const char* id_or_all);
   void view(const AlertsConfig& cfg, AlertView& out);
-  bool takeNewForChime(const AlertsConfig& cfg, uint16_t repeat_min, uint32_t now_ms);   // true once per (re)chime
+  bool takeNewForChime(const AlertsConfig& cfg, uint16_t repeat_min, uint32_t now_ms, Severity* top = nullptr);   // true once per (re)chime; top = highest severity that fired
   bool takeNewForNotify(const AlertsConfig& cfg, Severity min, char* event, size_t eventLen, char* headline, size_t headlineLen);   // one un-notified alert
   size_t count();
   bool stale();
