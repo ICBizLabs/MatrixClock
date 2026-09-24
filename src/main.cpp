@@ -71,6 +71,11 @@ void setup() {
   if (!LittleFS.begin(true)) LOGE("LittleFS mount failed");
   config_load();
   app::begin();
+  {
+    app::LastReset lr = app::lastReset();
+    if (lr.valid) LOGW("previous run ended by %s after %lu s while %s (internal heap %lu)", app::resetReasonName(lr.reason), (unsigned long)lr.uptime_s, lr.where[0] ? lr.where : "?", (unsigned long)lr.heap);
+    else LOGI("reset reason: %s", app::resetReasonName(lr.reason));
+  }
   shared::begin();
   alerts::begin();
   pushbullet::begin();

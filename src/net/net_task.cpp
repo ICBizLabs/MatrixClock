@@ -83,21 +83,25 @@ namespace net_task {
         AppConfig cfg;
         app::cfgLock(); cfg = g_cfg; app::cfgUnlock();
         uint32_t now = millis();
-        if (cfg.weather.enabled && ((forced & JOB_WEATHER) || (int32_t)(now - nextWx) >= 0)) { forced &= ~JOB_WEATHER; runWeather(cfg); }
+        if (cfg.weather.enabled && ((forced & JOB_WEATHER) || (int32_t)(now - nextWx) >= 0)) { forced &= ~JOB_WEATHER; app::trace("net", "weather"); runWeather(cfg); }
         if (paused) continue;
         now = millis();
-        if (cfg.alerts.enabled && ((forced & JOB_ALERTS) || (int32_t)(now - nextAl) >= 0)) { forced &= ~JOB_ALERTS; runAlerts(cfg); }
+        if (cfg.alerts.enabled && ((forced & JOB_ALERTS) || (int32_t)(now - nextAl) >= 0)) { forced &= ~JOB_ALERTS; app::trace("net", "alerts"); runAlerts(cfg); }
         if (paused) continue;
-        if ((forced & JOB_RADAR) || radar::due(cfg, millis())) { forced &= ~JOB_RADAR; radar::run(cfg); }
+        if ((forced & JOB_RADAR) || radar::due(cfg, millis())) { forced &= ~JOB_RADAR; app::trace("net", "radar"); radar::run(cfg); }
         if (paused) continue;
         forced &= ~JOB_PUSH;
+        app::trace("net", "pushbullet");
         pushbullet::runQueued(cfg);
         if (pushbullet::due(cfg, millis())) pushbullet::poll(cfg);
         if (paused) continue;
         forced &= ~JOB_UPDATE;
+        app::trace("net", "updater");
         updater::run(cfg);
         if (paused) continue;
+        app::trace("net", "voice");
         voice_pack::run(cfg);
+        app::trace("net", "idle");
       }
     }
   }

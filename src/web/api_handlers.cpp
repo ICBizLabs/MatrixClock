@@ -93,6 +93,7 @@ namespace web {
       n["wx_ok_age_s"] = ageSec(ns.last_wx_ok); n["wx_err_age_s"] = ageSec(ns.last_wx_err); n["wx_err"] = ns.wx_err; n["wx_fails"] = ns.wx_fails;
       n["al_ok_age_s"] = ageSec(ns.last_al_ok); n["al_err_age_s"] = ageSec(ns.last_al_err); n["al_err"] = ns.al_err; n["al_fails"] = ns.al_fails;
 
+      app::trace("web", "status");
       JsonObject sys = root["sys"].to<JsonObject>();
       sys["heap_free"] = ESP.getFreeHeap();
       sys["heap_largest"] = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
@@ -104,6 +105,13 @@ namespace web {
       sys["brightness"] = renderer::effectiveBrightness();
       sys["night"] = renderer::nightActive();
       sys["reboot_required"] = app::rebootRequiredFlags() != 0;
+      {
+        app::LastReset lr = app::lastReset();
+        JsonObject rs = sys["last_reset"].to<JsonObject>();
+        rs["reason"] = app::resetReasonName(lr.reason);
+        rs["crash"] = lr.valid;
+        if (lr.valid) { rs["where"] = lr.where; rs["uptime_s"] = lr.uptime_s; rs["heap"] = lr.heap; }
+      }
       JsonObject am = root["alarm"].to<JsonObject>();
       am["ringing"] = alarmclock::ringing();
       am["ringing_timer"] = alarmclock::ringingIsTimer();
@@ -338,6 +346,7 @@ namespace web {
     }
 
     void handleFrame(AsyncWebServerRequest* r) {
+      app::trace("web", "frame");
       AsyncWebServerResponse* res = r->beginChunkedResponse("application/octet-stream",
         [](uint8_t* buf, size_t maxLen, size_t index) -> size_t { return frame_snapshot::copy(buf, index, maxLen); });
       res->addHeader("Cache-Control", "no-store");
@@ -382,6 +391,7 @@ namespace web {
     });
     server.on("/api/frame", HTTP_GET, handleFrame);
     server.on("/api/demo", HTTP_POST, [](AsyncWebServerRequest* r) {
+      app::trace("web", "demo");
       auto param = [&](const char* n, const char* def) -> String {
         if (r->hasParam(n, true)) return r->getParam(n, true)->value();
         if (r->hasParam(n)) return r->getParam(n)->value();
@@ -390,13 +400,15 @@ namespace web {
       bool on = param("on", "1") != "0" && param("on", "1") != "false";
       long minutes = param("minutes", "10").toInt();
       bool sound = param("sound", "0") == "1" || param("sound", "0") == "true";
-      renderer::setDemo(on, (uint32_t)constrain(minutes, 1L, 720L) * 60000UL, sound);
+      long start = param("start", "0").toInt();                       // scenario index to begin with (0 = first)
+      renderer::setDemo(on, (uint32_t)constrain(minutes, 1L, 720L) * 60000UL, sound, (uint8_t)constrain(start, 0L, 63L));
       r->send(200, "application/json", on ? "{\"ok\":true,\"demo\":true}" : "{\"ok\":true,\"demo\":false}");
     });
     server.on("/api/update/check", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestCheck(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/update/install", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestInstall(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/voice/download", HTTP_POST, [](AsyncWebServerRequest* r) { voice_pack::requestDownload(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/radar/frame", HTTP_GET, [](AsyncWebServerRequest* r) {
+      app::trace("web", "radar/frame");
       long i = r->hasParam("i") ? r->getParam("i")->value().toInt() : -1;
       uint8_t n = radar::frameCount();
       if (!n) { sendJsonError(r, 404, "no radar frames yet"); return; }
@@ -472,6 +484,7 @@ namespace web {
       r->send(res);
     });
     server.on("/api/show", HTTP_POST, [](AsyncWebServerRequest* r) {
+      app::trace("web", "show");
       String which = r->hasParam("screen", true) ? r->getParam("screen", true)->value() : (r->hasParam("screen") ? r->getParam("screen")->value() : "forecast");
       if (renderer::requestFullScreen(which.c_str())) r->send(200, "application/json", "{\"ok\":true}");
       else sendJsonError(r, 409, "screen not available (no weather data yet?)");

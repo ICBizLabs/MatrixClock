@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "app.h"
 #include <Fonts/TomThumb.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
@@ -722,9 +723,9 @@ namespace renderer {
     if (screen == Screen::Forecast || screen == Screen::Hourly) screen = Screen::Composite;
   }
 
-  void setDemo(bool on, uint32_t total_ms, bool sound) {
+  void setDemo(bool on, uint32_t total_ms, bool sound, uint8_t start) {
     uint32_t now = millis();
-    if (on) { demo.on = true; demo.sound = sound; demo.endAt = now + (total_ms ? total_ms : 10 * 60000UL); demoApply(0, now); demo.nextAt = now + DEMO_STEP_MS; }
+    if (on) { demo.on = true; demo.sound = sound; demo.endAt = now + (total_ms ? total_ms : 10 * 60000UL); demoApply((uint8_t)(start % DEMO_COUNT), now); demo.nextAt = now + DEMO_STEP_MS; }
     else if (demo.on) { demo.on = false; demo.soundPending = false; demo.theme = nullptr; clearMessage(); screen = Screen::Composite; transFrom = 255; lastSlow = 0; lastBri = 0; }
   }
   bool demoActive() { return demo.on; }
@@ -779,6 +780,7 @@ namespace renderer {
     uint8_t bri = decideBrightness(lt, timeValid);
     if (bri != lastBri) { panel::setBrightness(bri); lastBri = bri; }
 
+    app::trace("render", screenName());
     c.fillScreen(0);
     if (otaActive) { drawOta(c); return; }
     if (screen == Screen::Test) {

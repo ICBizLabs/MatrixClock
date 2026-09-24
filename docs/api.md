@@ -32,7 +32,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/alarm/stop`, `/api/alarm/snooze` | control a ringing alarm |
 | GET | `/api/config?download=1` | full configuration with passwords, as a downloadable backup |
 | POST | `/api/test/push` | send a test Pushbullet notification |
-| POST | `/api/demo` | `on=1|0`, `minutes=N`, `sound=1|0`: cycle demo screens with sample data, auto-off after N minutes; with sound the alert, lightning, alarm, timer and message scenarios chime and every scenario says its name |
+| POST | `/api/demo` | `on=1|0`, `minutes=N`, `sound=1|0`, `start=N` (scenario index to begin with): cycle demo screens with sample data, auto-off after N minutes; with sound the alert, lightning, alarm, timer and message scenarios chime and every scenario says its name |
 | POST | `/api/update/check` | check the manifest for a newer version now |
 | POST | `/api/update/install` | download, verify and install the available version, then reboot |
 | POST | `/api/show` | `screen=forecast`, `screen=hourly` or `screen=radar` shows that full screen now |

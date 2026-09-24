@@ -9,6 +9,7 @@
 #include <LittleFS.h>
 #include <esp_heap_caps.h>
 #include "es8311.h"
+#include "app.h"
 #include "pins.h"
 #include "time/time_service.h"
 #include "util/timeutil.h"
@@ -255,6 +256,7 @@ namespace audio_out {
       for (;;) {
         if (xQueueReceive(q, &r, portMAX_DELAY) != pdTRUE) continue;
         playing = true;
+        app::trace("audio", "play");
         es8311::mute(false);
         digitalWrite(pins::PA_EN, HIGH);
         delay(20);
@@ -266,6 +268,7 @@ namespace audio_out {
         writeSilence(100);
         digitalWrite(pins::PA_EN, LOW);
         es8311::mute(!cfg.enabled);
+        app::trace("audio", "idle");
         playing = false;
       }
     }

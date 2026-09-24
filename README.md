@@ -155,8 +155,9 @@ are kept across updates.
 
 ## Screens
 
-Simulated renderings of the panel (same layout, fonts and colours as the firmware; the LED look is approximate).
-Animated GIFs live in `docs/screens/gif/`, still PNGs of the same scenes in `docs/screens/`.
+Captured from a running clock through `GET /api/frame` (demo mode supplies the sample data) and drawn as LED dots;
+the alert screens further down are simulated renderings with the same layout, fonts and colours. Animated GIFs live in
+`docs/screens/gif/`, still PNGs of the same scenes in `docs/screens/`.
 
 <img src="docs/screens/gif/rotation.gif" width="384" alt="Pages rotating with slide transitions">
 
@@ -182,8 +183,8 @@ Animated GIFs live in `docs/screens/gif/`, still PNGs of the same scenes in `doc
 | Valentine's theme | Halloween theme | Night mode |
 | <img src="docs/screens/gif/ip.gif" width="256" alt="IP after connecting"> | <img src="docs/screens/gif/ap.gif" width="256" alt="Setup access point"> | <img src="docs/screens/gif/splash.gif" width="256" alt="Splash"> |
 | IP after connecting | Setup access point | Splash |
-| <img src="docs/screens/gif/test.gif" width="256" alt="Test pattern"> |
-| Test pattern |
+| <img src="docs/screens/gif/test.gif" width="256" alt="Test pattern"> | <img src="docs/screens/gif/radar.gif" width="256" alt="Radar loop with coastline (real data)"> | <img src="docs/screens/gif/indoor.gif" width="256" alt="Indoor sensor page with trend arrows"> |
+| Test pattern | Radar loop: coastline, water tint, home cross (real data, dry day) | Indoor page: temperature, humidity, pressure with trend arrows |
 
 ### Weather alert screens
 
@@ -229,12 +230,12 @@ Everything is configured from the clock's own page at http://matrixclock.local/.
 the panel, current conditions, active alerts with acknowledge and test buttons, and system health; the other tabs
 hold the settings. Changes apply immediately except panel driver settings, which need a reboot.
 
-<img src="docs/ui/ui-status.png" width="720" alt="Status tab: live view of the panel, current weather, alerts and system health">
+<img src="docs/ui/ui-status.png" width="720" alt="Status tab: live view of the panel, radar loop, current weather, indoor sensor, alerts and system health">
 
 | | |
 |---|---|
 | <img src="docs/ui/ui-weather.png" alt="Location & Weather tab"> | <img src="docs/ui/ui-display.png" alt="Display tab"> |
-| Location & Weather: coordinates with city/ZIP search, time zone, units, NWS alert filters, lightning | Display: brightness schedule, night mode, pages, effects, colours |
+| Location & Weather: coordinates with city/ZIP search, time zone, units, NWS alert filters, lightning, indoor sensor | Display: brightness schedule, night mode, pages, effects, colours, radar |
 | <img src="docs/ui/ui-alarms.png" alt="Alarms tab"> | <img src="docs/ui/ui-update.png" alt="Update tab"> |
 | Alarms: countdown timer and four alarms with weekdays | Update: automatic updates, settings backup, firmware upload |
 | <img src="docs/ui/ui-panel.png" alt="Panel tab"> | <img src="docs/ui/ui-notify.png" alt="Notify tab"> |
@@ -273,7 +274,8 @@ IP address once online). After every WiFi connection the IP address is shown for
 
 The Status tab has a demo switch that cycles the panel through sample scenarios eight seconds each: sunny, rain, snow,
 thunderstorm, lightning, wind, high/low, sun times, the forecast and hourly screens, a tornado warning and a winter
-storm watch, an alarm, a running and a finished timer, a message, the holiday themes and night mode. It uses made-up
+storm watch, an alarm, a running and a finished timer, a message, the holiday themes, night mode, the indoor sensor
+page and a radar loop with a synthetic storm. It uses made-up
 data, turns itself off after the chosen number of minutes, and the wheel push ends it early. It is silent unless
 "with sounds" is ticked, in which case the alert, lightning, alarm, timer and message scenarios play their chimes even
 during quiet hours. Scripts can use `POST /api/demo?on=1&minutes=10&sound=1`.
@@ -328,6 +330,10 @@ line and water as a dim blue tint, from NASA's Global Imagery Browse Services (t
 the Natural Earth coastlines), fetched once for your location and radius. The Display tab can switch to coastline
 only, water only or nothing.
 
+<img src="docs/screens/gif/radar_demo.gif" width="384" alt="Radar loop with a synthetic storm crossing the coast (demo mode)">
+
+*The radar screen in demo mode: a synthetic storm crossing the coast; the label counts the frame age down to NOW.*
+
 The loop takes its turn with the forecast and hourly screens every few page cycles, and while echoes sit near the
 centre of the picture or the current conditions report rain or snow it comes back every two page cycles. The Status
 tab plays the same loop enlarged with a "Show on the clock" button, `POST /api/show` with `screen=radar` does the same,
@@ -340,6 +346,8 @@ works: wire 3.3 V, GND, SDA to GPIO 1 and SCL to GPIO 2 of the controller (the s
 firmware finds the sensor at 0x76 or 0x77 by its chip ID at boot, adds an **indoor** page to the rotation (a house icon,
 temperature, humidity and pressure) and shows the values on the Status tab with a three-hour chart. Keep the sensor a
 few inches away from the panel and the controller, which run warm, or dial the offset in on the Location & Weather tab.
+
+<img src="docs/screens/gif/indoor.gif" width="384" alt="Indoor page: house icon, temperature, humidity and pressure with trend arrows">
 
 Each value carries a **trend arrow**: temperature and humidity are compared with the reading one hour ago (0.5 °C or
 3 % RH to count as a change), pressure with three hours ago as weather services do (1 hPa; while the history is still

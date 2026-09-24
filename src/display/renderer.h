@@ -19,7 +19,7 @@ namespace renderer {
   String messageText();
   uint32_t messageRemainingSec();
   void nextPage();
-  void setDemo(bool on, uint32_t total_ms = 10 * 60000UL, bool sound = false);   // cycle demo scenarios (synthetic data), auto-off
+  void setDemo(bool on, uint32_t total_ms = 10 * 60000UL, bool sound = false, uint8_t start = 0);   // cycle demo scenarios from index `start` (synthetic data), auto-off
   bool demoActive();
   bool demoSound();
   bool consumeDemoSound(uint8_t& style, const char*& phrase);   // true when the demo wants a sound now: chime (ChimeStyle value, None = no chime) and/or a spoken phrase (nullptr = none)

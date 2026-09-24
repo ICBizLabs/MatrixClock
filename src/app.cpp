@@ -1,4 +1,7 @@
 #include "app.h"
+#include <esp_heap_caps.h>
+#include <esp_attr.h>
+#include <esp_system.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include "display/renderer.h"
@@ -38,9 +41,54 @@ namespace app {
     }
   }
 
+  namespace {
+    struct BlackBox { uint32_t magic; char where[40]; uint32_t uptime_s; uint32_t heap; };
+    constexpr uint32_t BB_MAGIC = 0x4D574342;   // "MWCB"
+    LastReset prevReset;
+  }
+  RTC_NOINIT_ATTR static BlackBox g_bb;
+
   void begin() {
     cfgMtx = xSemaphoreCreateRecursiveMutex();
     bootMs = millis();
+    prevReset.reason = (int)esp_reset_reason();
+    if (g_bb.magic == BB_MAGIC && prevReset.reason != ESP_RST_POWERON && prevReset.reason != ESP_RST_UNKNOWN) {
+      prevReset.valid = true;
+      memcpy(prevReset.where, g_bb.where, sizeof(prevReset.where));
+      prevReset.where[sizeof(prevReset.where) - 1] = '\0';
+      prevReset.uptime_s = g_bb.uptime_s;
+      prevReset.heap = g_bb.heap;
+    }
+    g_bb.magic = BB_MAGIC;
+    g_bb.where[0] = '\0';
+    g_bb.uptime_s = 0;
+    g_bb.heap = 0;
+  }
+
+  void trace(const char* what, const char* detail) {
+    char* w = g_bb.where;
+    size_t n = strlcpy(w, what ? what : "", sizeof(g_bb.where));
+    if (detail && n + 1 < sizeof(g_bb.where)) { w[n++] = ':'; strlcpy(w + n, detail, sizeof(g_bb.where) - n); }
+    g_bb.uptime_s = (millis() - bootMs) / 1000;
+    g_bb.heap = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+  }
+
+  LastReset lastReset() { return prevReset; }
+
+  const char* resetReasonName(int r) {
+    switch (r) {
+      case ESP_RST_POWERON: return "power-on";
+      case ESP_RST_EXT: return "external";
+      case ESP_RST_SW: return "software";
+      case ESP_RST_PANIC: return "panic";
+      case ESP_RST_INT_WDT: return "interrupt watchdog";
+      case ESP_RST_TASK_WDT: return "task watchdog";
+      case ESP_RST_WDT: return "watchdog";
+      case ESP_RST_DEEPSLEEP: return "deep sleep";
+      case ESP_RST_BROWNOUT: return "brownout";
+      case ESP_RST_SDIO: return "sdio";
+      default: return "unknown";
+    }
   }
 
   void cfgLock() { if (cfgMtx) xSemaphoreTakeRecursive(cfgMtx, pdMS_TO_TICKS(1000)); }
