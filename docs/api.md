@@ -18,7 +18,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/test/say` | `{text, force}` speaks a phrase from the voice pack ("Tornado Warning", "Lightning nearby", ...); 404 when the phrase is not in the pack, 409 without a pack or while another sound plays |
 | POST | `/api/voice/download` | fetch the manifest and (re)download the voice pack into LittleFS |
 | GET | `/api/indoor/history[?minutes=180&step=1]` | indoor sensor history, oldest first: `{sensor, step_min, age_min[], temp_c[], humidity[], pressure_hpa[]}` (up to 1440 minutes) |
-| GET | `/api/voice/phrases` | `{installed, voice, version, phrases[]}`: every phrase the installed pack contains |
+| GET | `/api/voice/phrases` | `{installed, voice, version, phrases[]}`: every phrase the installed pack contains (packs are 8-bit µ-law at 22050 Hz; format 1 packs, 4-bit ADPCM, still play) |
 | POST | `/api/test/panel` | shows the test pattern; optional `sec=3..300` (default 10) |
 | POST | `/api/message` | `{text, seconds (0 = until cleared), color "#RRGGBB", chime, force}` scrolls a message |
 | POST | `/api/message/clear` | remove the message |

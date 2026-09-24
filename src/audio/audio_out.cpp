@@ -205,6 +205,17 @@ namespace audio_out {
       return (int16_t)st.pred;
     }
 
+    // G.711 mu-law: one byte per sample, decoded through a table built at start-up
+    int16_t ulaw[256];
+    void buildUlaw() {
+      for (int i = 0; i < 256; i++) {
+        int b = ~i & 0xFF;
+        int exp = (b >> 4) & 7;
+        int s = ((((b & 0x0F) << 3) + 0x84) << exp) - 0x84;
+        ulaw[i] = (int16_t)((b & 0x80) ? -s : s);
+      }
+    }
+
     void playClip(const ClipRef& c) {
       File f = LittleFS.open(PACK_PATH, "r");
       if (!f || !f.seek(c.offset)) { LOGW("audio: clip open/seek failed"); return; }
@@ -216,10 +227,18 @@ namespace audio_out {
         size_t n = f.read(adpcmIn, want);
         if (!n) break;
         bytesLeft -= n;
-        for (size_t b = 0; b < n && left; b++) {
-          for (int nib = 0; nib < 2 && left; nib++, left--) {
-            int16_t v = adpcmStep(st, (adpcmIn[b] >> (nib ? 4 : 0)) & 0xF);
-            buf[2 * fill] = v; buf[2 * fill + 1] = v;   // mono -> both channels
+        if (c.codec == 1) {
+          for (size_t b = 0; b < n && left; b++) {
+            for (int nib = 0; nib < 2 && left; nib++, left--) {
+              int16_t v = adpcmStep(st, (adpcmIn[b] >> (nib ? 4 : 0)) & 0xF);
+              buf[2 * fill] = v; buf[2 * fill + 1] = v;   // mono -> both channels
+              if (++fill == FRAMES) { i2s.write((uint8_t*)buf, FRAMES * 4); fill = 0; }
+            }
+          }
+        } else {
+          for (size_t b = 0; b < n && left; b++, left--) {
+            int16_t v = ulaw[adpcmIn[b]];
+            buf[2 * fill] = v; buf[2 * fill + 1] = v;
             if (++fill == FRAMES) { i2s.write((uint8_t*)buf, FRAMES * 4); fill = 0; }
           }
         }
@@ -255,6 +274,7 @@ namespace audio_out {
     digitalWrite(pins::PA_EN, LOW);
     if (!codecAddr) { LOGW("audio: no ES8311 found, audio disabled"); return false; }
     for (int i = 0; i < 256; i++) sine[i] = (int16_t)(sinf(2.0f * (float)M_PI * i / 256.0f) * 32000.0f);
+    buildUlaw();
     i2s.setPins(pins::I2S_BCLK, pins::I2S_LRCK, pins::I2S_DOUT, pins::I2S_DIN, pins::I2S_MCLK);
     if (!i2s.begin(I2S_MODE_STD, RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO)) { LOGE("audio: I2S begin failed"); return false; }
     if (!es8311::init(codecAddr, RATE)) return false;

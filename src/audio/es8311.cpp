@@ -56,9 +56,11 @@ namespace es8311 {
     return ok;
   }
 
+  // DAC volume register: 0.5 dB per step, 0xBF = 0 dB (full scale), values above add digital gain up to +32 dB and
+  // clip badly. 100 % therefore maps to 0 dB and each percent below takes 0.5 dB off (60 % = -20 dB); 0 mutes.
   bool setVolume(uint8_t percent) {
     if (percent > 100) percent = 100;
-    uint8_t v = percent == 0 ? 0 : (uint8_t)(percent * 256 / 100 - 1);
+    uint8_t v = percent == 0 ? 0 : (uint8_t)(0xBF - (100 - percent));
     return wr(REG_DAC32, v);
   }
 

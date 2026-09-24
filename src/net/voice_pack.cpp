@@ -129,7 +129,7 @@ namespace voice_pack {
     updater::VoiceInfo vi = updater::voiceInfo();
     if (take()) { st.available_version = vi.present ? vi.version : 0; give(); }
     if (!vi.present) { if (!pi.installed) setState(State::NoPack, ""); forced = false; return; }
-    if (vi.format != 1) { setState(State::Error, "voice pack format unsupported"); forced = false; return; }
+    if (vi.format != 1 && vi.format != 2) { setState(State::Error, "voice pack format unsupported"); forced = false; return; }
     const bool wantDownload = forced || !pi.installed || pi.version != vi.version;
     if (!wantDownload) { if (status().state != State::Installed) setState(State::Installed); return; }
     if (alarmclock::ringing()) return;                                       // try again on the next pass

@@ -2,10 +2,10 @@
 #include <Arduino.h>
 #include "config/config.h"
 
-// I2S output through the ES8311: a small tone synthesizer for alert chimes plus an IMA ADPCM player for the
-// spoken clips in the voice pack (/voice.pack in LittleFS, see audio/voice.h).
+// I2S output through the ES8311: a small tone synthesizer for alert chimes plus a clip player (G.711 mu-law, or
+// IMA ADPCM for old packs) for the spoken clips in the voice pack (/voice.pack in LittleFS, see audio/voice.h).
 namespace audio_out {
-  struct ClipRef { uint32_t offset = 0, bytes = 0, samples = 0; };   // one entry of the voice pack index
+  struct ClipRef { uint32_t offset = 0, bytes = 0, samples = 0; uint8_t codec = 2; };   // voice pack index entry; codec 1 = IMA ADPCM, 2 = mu-law
 
   bool begin(const AudioConfig& ac, uint8_t codecAddr);   // codecAddr 0 = no codec found -> audio disabled
   void apply(const AudioConfig& ac);

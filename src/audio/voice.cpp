@@ -9,7 +9,7 @@ namespace voice {
   namespace {
     constexpr const char* PACK_PATH = "/voice.pack";
     constexpr uint32_t MAGIC = 0x5643574D;      // "MWCV" little-endian
-    constexpr uint16_t FORMAT = 1;
+    constexpr uint16_t FORMAT_ADPCM = 1, FORMAT_ULAW = 2;
     constexpr size_t HEADER_LEN = 72;
     constexpr uint32_t MAX_CLIPS = 1024;
     struct Entry { uint32_t key, offset, bytes, samples; };
@@ -65,7 +65,7 @@ namespace voice {
       const uint16_t format = rd16(h + 4), hlen = rd16(h + 6);
       const uint32_t rate = rd32(h + 8), count = rd32(h + 12), version = rd32(h + 16), indexOff = rd32(h + 20);
       const uint32_t namesOff = rd32(h + 24), nlen = rd32(h + 28), fileSize = rd32(h + 36);
-      if (format != FORMAT) { err = "pack format unsupported"; f.close(); return false; }
+      if (format != FORMAT_ADPCM && format != FORMAT_ULAW) { err = "pack format unsupported"; f.close(); return false; }
       if (hlen != HEADER_LEN || rate != 22050 || count == 0 || count > MAX_CLIPS || fileSize != (uint32_t)f.size() ||
           indexOff + 16 * count > fileSize || namesOff + nlen > fileSize) { err = "pack header invalid"; f.close(); return false; }
       entries = (Entry*)heap_caps_malloc(count * sizeof(Entry), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -103,7 +103,7 @@ namespace voice {
       normalize(phrase, key, sizeof(key));
       const Entry* e = find(fnv1a(key));
       if (!e) return false;
-      out.offset = e->offset; out.bytes = e->bytes; out.samples = e->samples;
+      out.offset = e->offset; out.bytes = e->bytes; out.samples = e->samples; out.codec = (uint8_t)pack.format;
       return true;
     }
   }

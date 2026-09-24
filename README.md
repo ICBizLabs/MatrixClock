@@ -336,7 +336,8 @@ repeated up to three times. Speech follows the chime's quiet hours and volume.
 
 The voice is not synthesized on the ESP32. A GitHub Actions step renders every phrase with
 [Piper](https://github.com/rhasspy/piper) (voice `en_US-ljspeech-medium`, trained on the public-domain LJ Speech
-recordings), compresses the clips to 4-bit ADPCM and publishes them as a ~2 MB *voice pack* next to the firmware. When
+recordings), stores the clips as 8-bit µ-law (clean enough that the small speaker, not the codec, is the limit) and
+publishes them as a ~4 MB *voice pack* next to the firmware. When
 speech is enabled the clock downloads the pack over HTTPS into its own flash file system, verifies the MD5 from the
 manifest and keeps it across firmware updates; a new pack is fetched only when its version changes. The Audio tab
 shows the installed pack, has a "Download voice pack" button and a phrase picker to hear any clip, and
@@ -388,7 +389,8 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixcloc
 | No chime | Status tab shows whether the ES8311 was found; check volume, quiet hours, speaker connector |
 | Indoor page says NO SENSOR | Status tab → System lists the I2C addresses; a BME280/BME680 answers at 0x76 or 0x77 (check SDO/address jumper, 3.3 V, SDA on GPIO 1, SCL on GPIO 2) |
 | Indoor temperature reads high | the board warms the sensor: move it on a short lead or set a negative offset on the Location & Weather tab |
-| Chime plays but nothing is spoken | Audio tab: the voice pack must show as installed; press "Download voice pack" (needs internet and about 2 MB of free flash), check `/api/log` for `voice:` lines |
+| Sounds are fuzzy or distorted | Volume 100 % is the codec's full scale; the small speaker distorts near the top, so try 50-70 %. Firmware before 0.5.1 applied digital gain above 75 %, which clipped: update |
+| Chime plays but nothing is spoken | Audio tab: the voice pack must show as installed; press "Download voice pack" (needs internet and about 4 MB of free flash), check `/api/log` for `voice:` lines |
 | Keys do nothing | Status tab shows whether the PCA9557 expander was found; `/api/log` prints raw key states |
 
 If a panel setting makes the board reset repeatedly, the firmware restores the panel defaults automatically after

@@ -2,7 +2,7 @@
 """
 Builds the clock's voice pack: one short spoken clip per NWS alert event type plus a few fixed phrases
 ("Weather alert", "Lightning nearby", "Alarm", "Timer finished", the demo scenario names), rendered offline with
-Piper TTS and stored as IMA ADPCM (4-bit, mono, 22050 Hz) in a single file the firmware downloads into LittleFS.
+Piper TTS and stored as G.711 mu-law (8-bit, mono, 22050 Hz) in a single file the firmware downloads into LittleFS.
 
     python tools/make_voice_pack.py --voice en_US-ljspeech-medium --out installer
 
@@ -10,12 +10,12 @@ Bump PACK_VERSION whenever the phrase list, the voice or the file format changes
 when the manifest's voice.version differs from the installed pack (Piper output is not bit-identical between runs,
 so the md5 is used to verify the download, not to detect changes).
 
-Pack layout (little-endian, format 1):
+Pack layout (little-endian, format 2; format 1 was 4-bit IMA ADPCM):
   header 72 bytes: "MWCV", u16 format, u16 header_len, u32 sample_rate, u32 count, u32 pack_version, u32 index_off,
                    u32 names_off, u32 names_len, u32 data_off, u32 file_size, char voice[32]
   index: count x { u32 key (FNV-1a of the normalized phrase), u32 offset, u32 bytes, u32 samples }, sorted by key
   names: count NUL-terminated normalized phrases in index order
-  data:  raw IMA ADPCM clips, 4-byte aligned, coder state reset at the start of every clip, low nibble first
+  data:  mu-law clips (one byte per sample), 4-byte aligned
 """
 import argparse, json, math, os, pathlib, struct, sys, urllib.request, wave
 from array import array
@@ -25,8 +25,8 @@ EVENTS_FILE = ROOT / "tools" / "nws_event_types.json"
 NWS_TYPES_URL = "https://api.weather.gov/alerts/types"
 HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/"
 
-PACK_VERSION = 2
-FORMAT = 1
+PACK_VERSION = 3
+FORMAT = 2
 RATE = 22050
 MAGIC = b"MWCV"
 HEADER = "<4sHHIIIIIIII32s"   # 72 bytes
@@ -107,6 +107,40 @@ def ima_decode(data, n):
         pred = max(-32768, min(32767, pred))
         idx = max(0, min(88, idx + IDX[code & 7]))
         out.append(pred)
+    return out
+
+
+ULAW_BIAS = 0x84
+ULAW_CLIP = 32635
+
+
+def ulaw_encode(samples):
+    out = bytearray(len(samples))
+    for i, s in enumerate(samples):
+        sign = 0x80 if s < 0 else 0
+        if s < 0:
+            s = -s
+        if s > ULAW_CLIP:
+            s = ULAW_CLIP
+        s += ULAW_BIAS
+        exp = 7
+        mask = 0x4000
+        while exp > 0 and not (s & mask):
+            exp -= 1
+            mask >>= 1
+        mant = (s >> (exp + 3)) & 0x0F
+        out[i] = (~(sign | (exp << 4) | mant)) & 0xFF
+    return bytes(out)
+
+
+def ulaw_decode(data, n):
+    out = array("h")
+    for i in range(n):
+        b = (~data[i]) & 0xFF
+        exp = (b >> 4) & 7
+        s = (((b & 0x0F) << 3) + ULAW_BIAS) << exp
+        s -= ULAW_BIAS
+        out.append(-s if b & 0x80 else s)
     return out
 
 
@@ -229,7 +263,7 @@ def synthesize_all(voice_name, onnx, phrases, tmpdir):
 def build_pack(voice_name, clips, pack_version):
     entries = []
     for key, pcm in clips.items():
-        entries.append([fnv1a(key), key, ima_encode(pcm), len(pcm)])
+        entries.append([fnv1a(key), key, ulaw_encode(pcm), len(pcm)])
     entries.sort(key=lambda e: e[0])
     count = len(entries)
     if count > MAX_CLIPS:
@@ -256,7 +290,7 @@ def build_pack(voice_name, clips, pack_version):
 
 def read_pack(blob):
     magic, fmt, hlen, rate, count, ver, index_off, names_off, names_len, data_off, file_size, voice = struct.unpack(HEADER, blob[:HEADER_LEN])
-    if magic != MAGIC or fmt != FORMAT or hlen != HEADER_LEN or file_size != len(blob):
+    if magic != MAGIC or fmt not in (1, 2) or hlen != HEADER_LEN or file_size != len(blob):
         sys.exit("pack header invalid")
     index = [struct.unpack("<IIII", blob[index_off + 16 * i: index_off + 16 * i + 16]) for i in range(count)]
     names = blob[names_off: names_off + names_len].split(b"\0")[:count]
@@ -270,11 +304,11 @@ def verify_pack(blob, clips, dump_dir=None):
     for (h, off, nbytes, samples), name in zip(p["index"], p["names"]):
         if fnv1a(name) != h:
             sys.exit(f"index/name mismatch for '{name}'")
-        dec = ima_decode(blob[off: off + nbytes], samples)
+        dec = ulaw_decode(blob[off: off + nbytes], samples)
         s = snr_db(clips[name], dec)
         worst = min(worst, s)
-        if s < 15:
-            sys.exit(f"'{name}': ADPCM round trip SNR {s:.1f} dB is too low")
+        if s < 25:
+            sys.exit(f"'{name}': mu-law round trip SNR {s:.1f} dB is too low")
         if dump_dir:
             write_wav(pathlib.Path(dump_dir) / (name.replace(" ", "_").replace("'", "") + ".wav"), dec)
     return p, worst
@@ -288,16 +322,20 @@ def selftest():
     pcm = array("h", (int(20000 * math.sin(2 * math.pi * 440 * i / RATE) * math.exp(-i / n) + random.randint(-300, 300)) for i in range(n)))
     enc = ima_encode(pcm)
     dec = ima_decode(enc, n)
+    s_adpcm = snr_db(pcm, dec)
+    assert len(enc) == n // 2 and s_adpcm >= 15, f"ADPCM round trip SNR {s_adpcm:.1f} dB"
+    enc = ulaw_encode(pcm)
+    dec = ulaw_decode(enc, n)
     s = snr_db(pcm, dec)
-    assert len(enc) == n // 2, "encoded size"
-    assert s >= 15, f"round trip SNR {s:.1f} dB"
+    assert len(enc) == n, "encoded size"
+    assert s >= 30, f"mu-law round trip SNR {s:.1f} dB"
     phrases = phrase_list(load_events(False, True))
     clips = {k: pcm for k in phrases[:3]}
     blob, entries = build_pack("selftest-voice", clips, 7)
     p, worst = verify_pack(blob, clips)
     assert p["count"] == 3 and p["version"] == 7 and p["voice"] == "selftest-voice"
     assert [e[0] for e in entries] == sorted(e[0] for e in entries)
-    print(f"selftest ok: round trip SNR {s:.1f} dB, {len(phrases)} phrases, no key collisions, pack {len(blob)} bytes")
+    print(f"selftest ok: mu-law round trip SNR {s:.1f} dB (ADPCM {s_adpcm:.1f} dB), {len(phrases)} phrases, no key collisions, pack {len(blob)} bytes")
 
 
 def main():
