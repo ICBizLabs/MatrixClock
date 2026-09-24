@@ -43,10 +43,14 @@ arrives, and is configured entirely through its own web interface.
 | Part | Notes |
 |---|---|
 | [Seengreat RGB Matrix HUB75 S3](https://seengreat.com/wiki/214/rgb-matrix-hub75-s3) (SKU 260612) | ESP32-S3-WROOM-1-N16R8: 16 MB flash, 8 MB PSRAM, native USB-C, ES8311 codec, ES7210 mic ADC, speaker amp, PCF85063 RTC, PCA9557 thumb-wheel switch, micro-SD |
-| P4 64x32 HUB75 panel (P4-256x128-16S-2121 or similar) | 1/16 scan, 3-in-1 SMD, 256x128 mm. Any 64x32 1/16-scan panel should work |
+| P4 64x32 HUB75 panel (P4-256x128-2121-A5 or similar) | 1/16 scan, 3-in-1 SMD, 256x128 mm. Any 64x32 1/16-scan panel should work. [Panel used in this build (AliExpress)](https://s.click.aliexpress.com/e/_c3olggmN) |
 | 5 V power supply | The board has a second USB-C and a VH-4P screw terminal for panel power (5 V / 4 A max). A 64x32 panel at full white can draw close to that |
 | Speaker (optional) | 4-8 ohm on the board's speaker connector, needed for the chime |
 | CR1220 / LIR battery (optional) | On the SH1.0 connector to keep the RTC running without power |
+
+**Where the display came from:** the panel used for this project is this P4 256x128 mm module.
+
+<a href="https://s.click.aliexpress.com/e/_c3olggmN"><img src="https://ae-pic-a1.aliexpress-media.com/kf/S68fe89304a9f4e888e5167fd0c0d50d3P.jpg_350x350.jpg" width="260" alt="P4 64x32 HUB75 LED matrix panel on AliExpress"></a>
 
 ### Wiring
 
