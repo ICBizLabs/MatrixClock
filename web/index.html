@@ -236,6 +236,17 @@ progress{width:100%;height:10px}
 </section>
 
 <section id="update">
+ <div class="card"><h2>Automatic updates</h2>
+  <table id="st-update"></table>
+  <div class="grid" style="margin-top:10px">
+   <label class="chk"><input data-k="update.check" type="checkbox">Check for new versions</label>
+   <label class="chk"><input data-k="update.auto_install" type="checkbox">Install them automatically</label>
+   <label>Check every (hours)<input data-k="update.check_hours" type="number" min="1" max="168"></label>
+   <label>Manifest URL<input data-k="update.url" maxlength="127"></label>
+  </div>
+  <div class="row"><button class="btn" onclick="save('update')">Save</button><button class="btn sec" onclick="post('/api/update/check')">Check now</button>
+   <button class="btn sec" id="installbtn" onclick="if(confirm('Download and install the new version now? The clock reboots when done.'))post('/api/update/install')">Install available version</button><span class="msg" id="msg-update2"></span></div>
+  <p class="msg">The clock reads the web installer's manifest, downloads the OTA image over HTTPS, checks its MD5 and reboots into the new version. Automatic installs wait while an alarm or timer is running.</p></div>
  <div class="card"><h2>Settings backup</h2><div class="row"><a class="btn sec" href="/api/config?download=1" style="text-decoration:none">Download backup</a>
   <input type="file" id="cfgfile" accept=".json"><button class="btn sec" onclick="restoreCfg()">Restore</button><span class="msg" id="msg-backup"></span></div>
   <p class="msg">The backup contains WiFi passwords. Restoring applies every section and reboots if panel settings changed.</p></div>
@@ -296,6 +307,9 @@ async function status(){try{const r=await fetch('/api/status');const s=await r.j
  row(y,'Forecast / hourly screens',s.sys.full_screen_block?'<span class="warn">held back: '+s.sys.full_screen_block+'</span>':'every '+(cfg?cfg.display.forecast_every_n_cycles:3)+' page cycles');
  row(y,'Panel',s.sys.panel_ok?s.sys.driver+' @ '+s.sys.refresh_hz+' Hz':'<span class="bad">not running</span>');row(y,'Memory','heap '+Math.round(s.sys.heap_free/1024)+' KB (largest '+Math.round(s.sys.heap_largest/1024)+' KB), PSRAM '+Math.round(s.sys.psram_free/1024)+' KB');
  row(y,'Audio',s.audio.available?'ready'+(s.audio.quiet_now?' (quiet hours)':''):'<span class="warn">no codec</span>');row(y,'Buttons',s.audio.buttons?'PCA9557 ok':'not found');
+ const U=s.update||{};const ut=$('#st-update');if(ut){ut.innerHTML='';row(ut,'Installed','v'+U.current);row(ut,'Latest',U.latest?'v'+U.latest+(U.state==='available'?' <span class="warn">new version available</span>':U.state==='up-to-date'?' <span class="ok">up to date</span>':''):'not checked yet');
+  row(ut,'Status',U.state+(U.state==='downloading'?' '+U.progress+'%':'')+(U.error?' <span class="bad">'+U.error+'</span>':'')+(U.last_check_age_s>=0?' · checked '+ago(U.last_check_age_s):''));$('#installbtn').disabled=U.state!=='available';}
+ if(U.state==='available')row(y,'Update','<span class="warn">v'+U.latest+' available</span> (Update tab)');
  const P=s.pushbullet||{};if(P.configured)row(y,'Pushbullet',(P.device_ok?'registered':'<span class="warn">device not registered</span>')+', sent '+P.sent+', received '+P.received+(P.last_err?' <span class="bad">'+P.last_err+'</span>':''));
  if(s.sys.theme)row(y,'Theme',s.sys.theme);
  const a2=s.alarm||{};if(a2.ringing)row(n,'Alarm','<span class="bad">'+(a2.ringing_timer?'timer done':'ringing '+(a2.label||''))+'</span> <button class="btn sec" onclick="post(\'/api/alarm/stop\')">Stop</button> <button class="btn sec" onclick="post(\'/api/alarm/snooze\')">Snooze</button>');

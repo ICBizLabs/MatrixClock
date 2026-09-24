@@ -22,6 +22,8 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | POST | `/api/alarm/stop`, `/api/alarm/snooze` | control a ringing alarm |
 | GET | `/api/config?download=1` | full configuration with passwords, as a downloadable backup |
 | POST | `/api/test/push` | send a test Pushbullet notification |
+| POST | `/api/update/check` | check the manifest for a newer version now |
+| POST | `/api/update/install` | download, verify and install the available version, then reboot |
 | POST | `/api/show` | `screen=forecast` or `screen=hourly` shows that full screen now |
 | POST | `/api/refresh` | fetch weather and alerts now |
 | GET | `/api/wifi/scan[?start=1|?poll=1]` | start / poll an async network scan |
@@ -47,6 +49,7 @@ Configuration keys and defaults:
   "audio":    { "enabled": true, "volume": 60, "chime": "two_tone", "repeat_min": 0, "quiet": { "enabled": true, "start": "22:00", "end": "07:00" } },
   "pushbullet": { "token": "", "device_iden": "", "notify_alerts": true, "notify_min_severity": "Severe", "notify_lightning": true,
                   "notify_alarms": false, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
+  "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixClock/manifest.json", "check_hours": 6 },
   "lightning": { "enabled": false, "server": "blitzortung.ha.sed.pl", "port": 1883, "radius_km": 40, "window_min": 15, "chime": true, "show_bolt": true },
   "alarms":   [ { "enabled": false, "time": "07:00", "days": "1111100", "chime": "triple_beep", "label": "" }, "... up to 4" ] }
 ```

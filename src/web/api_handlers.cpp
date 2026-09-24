@@ -21,6 +21,7 @@
 #include "alarm/alarm.h"
 #include "net/lightning.h"
 #include "net/pushbullet.h"
+#include "net/updater.h"
 #include "display/frame_snapshot.h"
 #include "util/log.h"
 
@@ -119,6 +120,16 @@ namespace web {
       lg["total"] = lst.total;
       sys["theme"] = renderer::themeName();
       sys["full_screen_block"] = renderer::fullScreenBlockReason();
+      updater::Status us = updater::status();
+      JsonObject up = root["update"].to<JsonObject>();
+      up["state"] = updater::stateName(us.state);
+      up["current"] = MWC_VERSION;
+      up["latest"] = us.latest;
+      up["file"] = us.file;
+      up["size"] = us.size;
+      up["progress"] = us.progress;
+      up["last_check_age_s"] = us.last_check_ms ? (millis() - us.last_check_ms) / 1000 : -1;
+      up["error"] = us.err;
       pushbullet::Status pbs = pushbullet::status();
       JsonObject pb = root["pushbullet"].to<JsonObject>();
       pb["configured"] = pbs.configured; pb["device_ok"] = pbs.device_ok; pb["sent"] = pbs.sent; pb["received"] = pbs.received;
@@ -179,7 +190,7 @@ namespace web {
       struct { uint16_t bit; const char* name; bool reboot; } sections[] = {
         { CHG_WIFI, "wifi", false }, { CHG_LOCATION, "location", false }, { CHG_TIME, "time", false }, { CHG_WEATHER, "weather", false },
         { CHG_ALERTS, "alerts", false }, { CHG_DISPLAY, "display", false }, { CHG_PANEL, "panel", true }, { CHG_AUDIO, "audio", false },
-        { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false } };
+        { CHG_ALARMS, "alarms", false }, { CHG_LIGHTNING, "lightning", false }, { CHG_PUSHBULLET, "pushbullet", false }, { CHG_UPDATE, "update", false } };
       for (auto& s : sections) if (changed & s.bit) (s.reboot ? reboot : applied).add(s.name);
       res->setLength();
       r->send(res);
@@ -295,6 +306,8 @@ namespace web {
       r->send(200, "application/json", "{\"ok\":true}");
     });
     server.on("/api/frame", HTTP_GET, handleFrame);
+    server.on("/api/update/check", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestCheck(); r->send(200, "application/json", "{\"ok\":true}"); });
+    server.on("/api/update/install", HTTP_POST, [](AsyncWebServerRequest* r) { updater::requestInstall(); r->send(200, "application/json", "{\"ok\":true}"); });
     server.on("/api/show", HTTP_POST, [](AsyncWebServerRequest* r) {
       String which = r->hasParam("screen", true) ? r->getParam("screen", true)->value() : (r->hasParam("screen") ? r->getParam("screen")->value() : "forecast");
       if (renderer::requestFullScreen(which.c_str())) r->send(200, "application/json", "{\"ok\":true}");

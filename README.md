@@ -83,8 +83,17 @@ python -m http.server 8000      # then open http://localhost:8000/ in Chrome or 
 
 `installer/` also holds the images directly: `matrix-clock-<version>-factory.bin` (whole flash, write at offset 0 with
 esptool) and `matrix-clock-<version>-ota.bin` (upload from the clock's Update tab). Every push to `main` rebuilds the
-firmware on GitHub Actions; the images are attached to each workflow run as an artifact, so no local toolchain is
-needed to get a fresh build. `python tools/make_installer.py --build` regenerates the folder locally.
+firmware on GitHub Actions, republishes the installer and, through the manifest, offers the new version to every clock
+that has automatic updates on; the images are also attached to each workflow run as an artifact. `python tools/make_installer.py --build` regenerates the folder locally.
+
+## Automatic updates
+
+Once a clock runs version 0.3.0 or later it keeps itself current: every six hours (configurable on the Update tab) it
+reads the installer's `manifest.json`, and when a newer version is listed it downloads the OTA image over HTTPS, checks
+the MD5 from the manifest, installs it with a progress bar on the panel and reboots. Automatic installs wait while an
+alarm or timer is running. The Update tab shows the installed and latest versions and has "Check now" and "Install"
+buttons; automatic installation can be switched off to install manually. The manifest URL is configurable, so a fork
+can point its clocks at its own GitHub Pages site.
 
 ## Building and flashing
 
@@ -165,7 +174,7 @@ below); the clock stays visible throughout.
 | <img src="docs/screens/gif/wwa.gif" width="256" alt="Winter Weather Advisory (Moderate)"> | <img src="docs/screens/gif/heatadv.gif" width="256" alt="Heat Advisory (Moderate)"> | <img src="docs/screens/gif/fogadv.gif" width="256" alt="Dense Fog Advisory (Minor)"> |
 | Winter Weather Advisory (Moderate) | Heat Advisory (Moderate) | Dense Fog Advisory (Minor) |
 
-<img src="docs/screens/gif/tornado_strip.png" width="192" alt="Tornado warning banner scrolling, four frames half a second apart">
+<img src="docs/screens/tornado_strip.png" width="192" alt="Tornado warning banner scrolling, four frames half a second apart">
 
 *Four frames, half a second apart: the banner scrolls left while the frame flashes.*
 

@@ -337,6 +337,17 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (t) changed |= CHG_PUSHBULLET;
   }
 
+  o = src["update"];
+  if (!o.isNull()) {
+    t = false;
+    if (!getBool(o, "check", c.update.check, t, err)) return false;
+    if (!getBool(o, "auto_install", c.update.auto_install, t, err)) return false;
+    if (!getStr(o, "url", c.update.url, t, err, false)) return false;
+    if (strncmp(c.update.url, "https://", 8) != 0 && strncmp(c.update.url, "http://", 7) != 0) { err = "update.url: must start with http:// or https://"; return false; }
+    if (!getNum(o, "check_hours", c.update.check_hours, t, err, 1, 168)) return false;
+    if (t) changed |= CHG_UPDATE;
+  }
+
   JsonVariantConst al = src["alarms"];
   if (!al.isNull()) {
     if (!al.is<JsonArrayConst>()) { err = "alarms: expected an array"; return false; }
@@ -499,6 +510,12 @@ void config_to_json(const AppConfig& c, JsonObject dst, bool mask_secrets) {
   o["poll_sec"] = c.pushbullet.poll_sec;
   o["show_sec"] = c.pushbullet.show_sec;
   o["chime"] = c.pushbullet.chime;
+
+  o = dst["update"].to<JsonObject>();
+  o["check"] = c.update.check;
+  o["auto_install"] = c.update.auto_install;
+  o["url"] = c.update.url;
+  o["check_hours"] = c.update.check_hours;
 
   JsonArray al = dst["alarms"].to<JsonArray>();
   for (uint8_t i = 0; i < MAX_ALARMS; i++) {

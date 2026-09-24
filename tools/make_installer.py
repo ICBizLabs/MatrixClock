@@ -4,7 +4,7 @@
 Usage:  python tools/make_installer.py [--build] [--out installer]
 Needs a completed `pio run` (or --build to run it) and esptool (`pip install "esptool~=4.8"`).
 """
-import argparse, json, os, pathlib, re, shutil, subprocess, sys
+import argparse, hashlib, json, os, pathlib, re, shutil, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENV = "seengreat_hub75_s3"
@@ -44,12 +44,17 @@ def main():
                            "0x0", str(parts["bootloader"]), "0x8000", str(parts["partitions"]),
                            "0xe000", str(parts["boot_app0"]), "0x10000", str(parts["firmware"])])
     shutil.copyfile(parts["firmware"], ota)
+    ota_bytes = ota.read_bytes()
     manifest = {
         "name": "Matrix Clock",
         "version": ver,
         "new_install_prompt_erase": True,
         "new_install_improv_wait_time": 0,
         "builds": [{"chipFamily": "ESP32-S3", "parts": [{"path": factory.name, "offset": 0}]}],
+        # used by the firmware's self-updater
+        "ota": ota.name,
+        "ota_size": len(ota_bytes),
+        "ota_md5": hashlib.md5(ota_bytes).hexdigest(),
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(f"installer: {factory.name} ({factory.stat().st_size} bytes), {ota.name}, manifest.json (v{ver})")

@@ -158,6 +158,13 @@ struct PushbulletConfig {         // phone notifications out, pushes in (https:/
   bool chime = true;              // chime when a push is shown
 };
 
+struct UpdateConfig {             // self-update from the web installer's manifest (GitHub Pages)
+  bool check = true;              // look for new versions periodically
+  bool auto_install = true;       // install automatically when a newer version is found
+  char url[128] = "https://icbizlabs.github.io/MatrixClock/manifest.json";
+  uint16_t check_hours = 6;
+};
+
 struct AppConfig {
   WifiConfig wifi;
   LocationConfig location;
@@ -170,13 +177,14 @@ struct AppConfig {
   AlarmsConfig alarms;
   LightningConfig lightning;
   PushbulletConfig pushbullet;
+  UpdateConfig update;
   bool first_boot = true;
 };
 
 // Bit flags telling which sections a JSON merge touched (used to apply changes live / ask for a reboot)
 enum : uint16_t {
   CHG_WIFI = 1, CHG_LOCATION = 2, CHG_TIME = 4, CHG_WEATHER = 8,
-  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024
+  CHG_ALERTS = 16, CHG_DISPLAY = 32, CHG_PANEL = 64, CHG_AUDIO = 128, CHG_ALARMS = 256, CHG_LIGHTNING = 512, CHG_PUSHBULLET = 1024, CHG_UPDATE = 2048
 };
 
 extern AppConfig g_cfg;

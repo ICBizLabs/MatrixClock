@@ -10,6 +10,7 @@
 #include "alert_store.h"
 #include "shared_state.h"
 #include "pushbullet.h"
+#include "updater.h"
 #include "util/log.h"
 
 namespace net_task {
@@ -88,6 +89,9 @@ namespace net_task {
         forced &= ~JOB_PUSH;
         pushbullet::runQueued(cfg);
         if (pushbullet::due(cfg, millis())) pushbullet::poll(cfg);
+        if (paused) continue;
+        forced &= ~JOB_UPDATE;
+        updater::run(cfg);
       }
     }
   }
