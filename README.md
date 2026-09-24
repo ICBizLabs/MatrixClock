@@ -5,8 +5,10 @@ emergency weather alerts. Runs on the Seengreat **RGB Matrix HUB75 S3** controll
 Open-Meteo and alerts from api.weather.gov, plays a chime through the board's speaker output when a new alert
 arrives, and is configured entirely through its own web interface.
 
-> Status: feature-complete firmware that builds cleanly; first hardware bring-up still pending. See
-> [Troubleshooting](#troubleshooting) for the settings most likely to need adjusting on a new panel.
+> Status: running on real hardware (the controller and panel listed below). The panel driver, WiFi setup, weather,
+> NWS alerts, web interface, OTA and self-update are in daily use. The alert chime, thumb-wheel keys, lightning feed
+> and Pushbullet have been built but not yet confirmed on hardware; reports welcome. Other 64x32 panels may need the
+> driver settings in [Troubleshooting](#troubleshooting).
 
 ## Features
 
