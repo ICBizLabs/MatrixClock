@@ -19,4 +19,7 @@ namespace http_util {
   // JSON POST; the response body (if any) is handed to consume when provided
   bool postJson(const String& url, const Options& opt, const String& body, std::function<bool(Stream&, int contentLength)> consume, String& err, int* httpCode = nullptr);
   bool enoughMemoryForTls();          // largest free internal block check before a TLS handshake
+  // Reads a whole response body into buf inside a consume callback. Handles both a known Content-Length and the
+  // HTTP/1.0 "Connection: close" case (contentLength < 0, body ends when the server closes). Fails on more than max bytes.
+  bool readBody(Stream& s, int contentLength, uint8_t* buf, size_t max, size_t& got, String& err, uint32_t stallMs = 10000);
 }

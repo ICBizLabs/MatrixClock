@@ -67,15 +67,8 @@ namespace radar {
       size_t got = 0;
       int code = 0;
       bool ok = http_util::get(url(cfg, suffix), opt, [&](Stream& s, int len) -> bool {
-        if (len <= 0 || (size_t)len > MAX_PNG) { err = len <= 0 ? "no content length" : "image too large"; return false; }
-        uint32_t lastData = millis();
-        while (got < (size_t)len) {
-          int n = s.readBytes(pngBuf + got, (size_t)len - got);
-          if (n <= 0) { if (millis() - lastData > 10000) { err = "download stalled"; return false; } delay(1); continue; }
-          lastData = millis();
-          got += n;
-        }
-        return true;
+        // the map server answers HTTP/1.0 requests without a Content-Length and closes the connection after the body
+        return http_util::readBody(s, len, pngBuf, MAX_PNG, got, err);
       }, err, &code);
       if (!ok) return false;
       if (got < 8 || memcmp(pngBuf, "\x89PNG", 4) != 0) { err = "not a PNG (service error?)"; return false; }

@@ -20,6 +20,29 @@ namespace http_util {
     bool request(const String& url, const Options& opt, const String* body, std::function<bool(Stream&, int)> consume, String& err, int* httpCode);
   }
 
+  bool readBody(Stream& s, int len, uint8_t* buf, size_t max, size_t& got, String& err, uint32_t stallMs) {
+    NetworkClient& c = static_cast<NetworkClient&>(s);   // HTTPClient::getStream() hands out its NetworkClient
+    got = 0;
+    if (len > 0 && (size_t)len > max) { err = "body too large"; return false; }
+    uint32_t last = millis();
+    for (;;) {
+      if (len > 0 && got >= (size_t)len) break;
+      int avail = c.available();
+      if (avail > 0) {
+        size_t want = (size_t)avail < max - got ? (size_t)avail : max - got;
+        if (!want) { err = "body too large"; return false; }
+        int n = c.read(buf + got, want);
+        if (n > 0) { got += (size_t)n; last = millis(); continue; }
+      }
+      if (!c.connected() && c.available() <= 0) break;          // HTTP/1.0: the server closes after the body
+      if (millis() - last > stallMs) { err = "download stalled"; return false; }
+      delay(1);
+    }
+    if (len > 0 && got != (size_t)len) { err = "short body"; return false; }
+    if (!got) { err = "empty body"; return false; }
+    return true;
+  }
+
   bool get(const String& url, const Options& opt, std::function<bool(Stream&, int)> consume, String& err, int* httpCode) {
     return request(url, opt, nullptr, consume, err, httpCode);
   }
