@@ -20,7 +20,9 @@ namespace pushbullet {
     uint8_t qhead = 0, qcount = 0;
     SemaphoreHandle_t mtx = nullptr;
     Status st = {};
-    double modifiedAfter = 0;          // Pushbullet "modified" timestamps are fractional seconds
+    double modifiedAfter = 0;          // Pushbullet "modified" timestamps are fractional seconds (microseconds)
+    String shownIdens[8];              // pushes already shown, so a repeat from the API is never displayed twice
+    uint8_t shownIdx = 0;
     String ownIdens[8]; uint8_t ownIdx = 0;
     uint32_t nextPoll = 0;
     bool deviceChecked = false;
@@ -136,7 +138,8 @@ namespace pushbullet {
     opt.userAgent = MWC_USER_AGENT_NAME "/" MWC_VERSION;
     opt.headerName = "Access-Token"; opt.headerValue = cfg.pushbullet.token;
     opt.timeoutMs = 15000;
-    String url = String(API) + "pushes?active=true&limit=5&modified_after=" + String(modifiedAfter, 3);
+    // Pushbullet stamps pushes in microseconds; sending fewer decimals returns the same push on every poll
+    String url = String(API) + "pushes?active=true&limit=5&modified_after=" + String(modifiedAfter, 6);
     JsonDocument doc(psramAllocator());
     JsonDocument filter;
     JsonObject f = filter["pushes"].add<JsonObject>();
@@ -155,8 +158,12 @@ namespace pushbullet {
       double mod = p["modified"] | 0.0;
       if (mod > modifiedAfter) modifiedAfter = mod;
       const char* iden = p["iden"] | "";
-      bool own = false;
-      for (uint8_t k = 0; k < 8; k++) if (ownIdens[k].length() && ownIdens[k] == iden) own = true;
+      bool own = false, shown = false;
+      for (uint8_t k = 0; k < 8; k++) {
+        if (ownIdens[k].length() && ownIdens[k] == iden) own = true;
+        if (shownIdens[k].length() && shownIdens[k] == iden) shown = true;
+      }
+      if (shown) continue;
       const char* src = p["source_device_iden"] | "";
       if (own || (cfg.pushbullet.device_iden[0] && strcmp(src, cfg.pushbullet.device_iden) == 0)) continue;
       const char* target = p["target_device_iden"] | "";
@@ -169,6 +176,7 @@ namespace pushbullet {
       else if (*link && !text.length()) text = link;
       if (!text.length()) continue;
       if (text.length() > 200) text = text.substring(0, 200);
+      if (*iden) shownIdens[shownIdx++ & 7] = iden;
       renderer::showMessage(text.c_str(), (uint32_t)cfg.pushbullet.show_sec * 1000UL, 0x40C0FF);
       if (cfg.pushbullet.chime) audio_out::chime(cfg.audio.chime, false);
       st.received++;
