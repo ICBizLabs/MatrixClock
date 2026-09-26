@@ -7,7 +7,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | GET | `/` | Web UI (gzip, ETag) |
 | GET | `/setup` | mobile setup wizard (WiFi, location, time zone, alert contact) |
 | GET | `/manifest.webmanifest`, `/sw.js`, `/icon-192.png`, `/icon-512.png`, `/apple-touch-icon.png` | web-app manifest, service worker and icons for "Add to Home Screen" |
-| GET | `/api/status` | time, weather summary, active alerts, WiFi, network fetch status, memory, panel, audio, speech (voice pack state), indoor sensor (values, trends), I2C map |
+| GET | `/api/status` | time, weather summary, active alerts, WiFi, network fetch status, memory, panel, audio, speech (voice pack state), indoor sensor (values, trends), I2C map with every address found |
 | GET | `/api/config` | full configuration (passwords masked as `***`) plus `tz_options` |
 | POST | `/api/config` | partial configuration merge; body is any subset of the config object. Returns `{ok, applied[], reboot_required[]}` or `{ok:false, error}` with HTTP 400 |
 | GET | `/api/weather` | last Open-Meteo result |
@@ -25,6 +25,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 | GET | `/api/radar/frame?i=N` | frame N (0 = oldest) as raw RGB565 little-endian 64x32 (headers `X-Frame-Size`, `X-Frame-Age-Min`) |
 | GET | `/api/radar/base` | base map mask, one byte per pixel (bit 0 water, bit 1 land, bit 2 coastline), 64x32 |
 | POST | `/api/radar/refresh` | fetch the newest composite now |
+| POST | `/api/indoor/rescan` | scan the I2C bus and probe for the sensor again (runs on the next main-loop pass; read `/api/status` a second later) |
 | GET | `/api/indoor/history[?minutes=180&step=1]` | indoor sensor history, oldest first: `{sensor, has_gas, step_min, age_min[], temp_c[], humidity[], pressure_hpa[], gas_kohm[], air_score[]}` (up to 1440 minutes) |
 | GET | `/api/voice/phrases` | `{installed, voice, version, phrases[]}`: every phrase the installed pack contains (packs are 8-bit µ-law at 22050 Hz; format 1 packs, 4-bit ADPCM, still play) |
 | POST | `/api/test/panel` | shows the test pattern; optional `sec=3..300` (default 10) |

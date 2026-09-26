@@ -256,6 +256,10 @@ namespace web {
       const i2c_bus::Map& m = i2c_bus::map();
       JsonObject i2c = root["i2c"].to<JsonObject>();
       i2c["es8311"] = m.es8311; i2c["pca9557"] = m.pca9557; i2c["rtc"] = m.rtc;
+      {
+        JsonArray found = i2c["found"].to<JsonArray>();
+        for (uint8_t k = 0; k < m.n; k++) { char hex[6]; snprintf(hex, sizeof(hex), "0x%02X", m.found[k]); found.add(hex); }
+      }
       res->setLength();
       r->send(res);
     }
@@ -523,6 +527,12 @@ namespace web {
       r->send(res);
     });
     server.on("/api/radar/refresh", HTTP_POST, [](AsyncWebServerRequest* r) { radar::requestRefresh(); r->send(200, "application/json", "{\"ok\":true}"); });
+    server.on("/api/indoor/rescan", HTTP_POST, [](AsyncWebServerRequest* r) {
+      // the scan itself runs on the main loop (the I2C driver misreports acknowledges when driven from this task)
+      i2c_bus::requestRescan();
+      env_sensor::requestRescan();
+      r->send(200, "application/json", "{\"ok\":true,\"pending\":true}");
+    });
     server.on("/api/indoor/history", HTTP_GET, [](AsyncWebServerRequest* r) {
       long minutes = r->hasParam("minutes") ? r->getParam("minutes")->value().toInt() : 180;
       long step = r->hasParam("step") ? r->getParam("step")->value().toInt() : 0;

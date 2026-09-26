@@ -16,6 +16,8 @@ namespace i2c_bus {
   bool lock(uint32_t timeout_ms = 50);
   void unlock();
   const Map& identify();    // scans the bus once and classifies devices; cached afterwards
+  void requestRescan();     // scan again from the main loop (hot-plugged sensor); the result lands in map()
+  void loop();              // main loop: runs a requested scan on the loop task
   const Map& map();
 
   // Register helpers (take the lock internally)

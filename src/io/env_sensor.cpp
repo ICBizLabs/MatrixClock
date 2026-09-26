@@ -346,29 +346,46 @@ namespace env_sensor {
     }
   }
 
+  namespace {
+    uint32_t lastProbe = 0;
+    volatile bool detectedEvent = false, probeReq = false;
+    constexpr uint32_t PROBE_MS = 30000;   // while nothing is connected, look again this often (hot plug)
+
+    bool probe(bool loud) {
+      for (uint8_t a : ADDRS) {
+        uint8_t id = 0;
+        if (!i2c_bus::readReg(a, REG_ID, id)) continue;
+        if (id == 0x60) kind = Type::BME280;
+        else if (id == 0x58) kind = Type::BMP280;
+        else if (id == 0x61) kind = Type::BME680;
+        else continue;
+        addr = a;
+        break;
+      }
+      if (kind == Type::None) { if (loud) LOGI("indoor: no BME280/BMP280/BME680 found at 0x76/0x77"); return false; }
+      bool ok = kind == Type::BME680 ? init680() : init280();
+      if (!ok) { LOGW("indoor: %s at 0x%02X did not answer during setup", typeName(), addr); kind = Type::None; addr = 0; return false; }
+      if (!hist) hist = (Hist*)heap_caps_malloc(sizeof(Hist) * HIST_MIN, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+      if (!hist) hist = (Hist*)malloc(sizeof(Hist) * HIST_MIN);
+      histHead = histCount = 0; lastPoint = 0; measuring = false; lastTrigger = 0; errs = 0;
+      startedMs = millis();
+      if (gasOn) loadBaseline();
+      LOGI("indoor: %s at 0x%02X%s", typeName(), addr, gasOn ? ", gas sensor on" : "");
+      return true;
+    }
+  }
+
   void begin(const IndoorConfig& ic) {
     cfg = ic;
-    mtx = xSemaphoreCreateMutex();
+    if (!mtx) mtx = xSemaphoreCreateMutex();
     if (!cfg.enabled) { LOGI("indoor: disabled"); return; }
-    for (uint8_t a : ADDRS) {
-      uint8_t id = 0;
-      if (!i2c_bus::readReg(a, REG_ID, id)) continue;
-      if (id == 0x60) kind = Type::BME280;
-      else if (id == 0x58) kind = Type::BMP280;
-      else if (id == 0x61) kind = Type::BME680;
-      else continue;
-      addr = a;
-      break;
-    }
-    if (kind == Type::None) { LOGI("indoor: no BME280/BMP280/BME680 found at 0x76/0x77"); return; }
-    bool ok = kind == Type::BME680 ? init680() : init280();
-    if (!ok) { LOGW("indoor: %s at 0x%02X did not answer during setup", typeName(), addr); kind = Type::None; addr = 0; return; }
-    hist = (Hist*)heap_caps_malloc(sizeof(Hist) * HIST_MIN, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!hist) hist = (Hist*)malloc(sizeof(Hist) * HIST_MIN);
-    startedMs = millis();
-    if (gasOn) loadBaseline();
-    LOGI("indoor: %s at 0x%02X%s", typeName(), addr, gasOn ? ", gas sensor on" : "");
+    probe(true);
+    lastProbe = millis();
   }
+
+  void requestRescan() { probeReq = true; }
+
+  bool consumeDetectedEvent() { if (!detectedEvent) return false; detectedEvent = false; return true; }
 
   void apply(const IndoorConfig& ic) {
     const bool was = cfg.enabled, gasWas = cfg.gas;
@@ -379,7 +396,13 @@ namespace env_sensor {
   }
 
   void loop(uint32_t now) {
-    if (kind == Type::None || !cfg.enabled) return;
+    if (!cfg.enabled) return;
+    if (kind == Type::None) {                       // nothing connected: look again now and then, or when asked
+      const bool asked = probeReq;
+      if (asked || now - lastProbe >= PROBE_MS) { probeReq = false; lastProbe = now; if (probe(asked)) detectedEvent = true; }
+      return;
+    }
+    probeReq = false;
     if (!measuring) {
       uint32_t period = (uint32_t)(cfg.sample_sec ? cfg.sample_sec : 10) * 1000UL;
       if (lastTrigger && now - lastTrigger < period) return;

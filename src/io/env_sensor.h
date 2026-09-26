@@ -44,6 +44,8 @@ namespace env_sensor {
   void begin(const IndoorConfig& cfg);          // probes the bus; safe to call without a sensor
   void apply(const IndoorConfig& cfg);          // CHG_INDOOR
   void loop(uint32_t now_ms);                   // main loop: non-blocking sampling
+  void requestRescan();                         // probe the bus again on the next loop() (web UI button)
+  bool consumeDetectedEvent();                  // true once after a sensor appeared after boot (main adds its pages)
   void setAltitudeHint(float meters);           // elevation from the weather service, used when indoor.altitude_m < 0
   void setOutdoorTempC(float c);                // current outdoor temperature (condensation risk); NAN = unknown
   Type type();

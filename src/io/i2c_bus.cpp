@@ -34,20 +34,36 @@ namespace i2c_bus {
   bool lock(uint32_t timeout_ms) { return mtx && xSemaphoreTake(mtx, pdMS_TO_TICKS(timeout_ms)) == pdTRUE; }
   void unlock() { if (mtx) xSemaphoreGive(mtx); }
 
+  namespace {
+    volatile bool rescanReq = false;
+
+    // one pass over the bus into m; false when the result looks wrong (a scan started while the driver was busy
+    // reports acknowledges at addresses where nothing exists)
+    bool scanInto(Map& m) {
+      m = Map();
+      if (!lock(200)) return false;
+      for (uint8_t a = 0x08; a < 0x78 && m.n < sizeof(m.found); a++) {
+        Wire.beginTransmission(a);
+        if (Wire.endTransmission() != 0) continue;
+        m.found[m.n++] = a;
+        if (a == pins::I2C_ADDR_RTC) m.rtc = a;
+        else if (a >= 0x18 && a <= 0x1F) {
+          if (!m.es8311 && probeES8311(a)) m.es8311 = a;
+          else if (!m.pca9557) m.pca9557 = a;
+        }
+      }
+      unlock();
+      return m.n < 12 && m.rtc != 0;   // this board always has its RTC at 0x51; more than a dozen devices is noise
+    }
+  }
+
   const Map& identify() {
     if (scanned) return theMap;
-    if (!lock(200)) return theMap;
-    for (uint8_t a = 0x08; a < 0x78 && theMap.n < sizeof(theMap.found); a++) {
-      Wire.beginTransmission(a);
-      if (Wire.endTransmission() != 0) continue;
-      theMap.found[theMap.n++] = a;
-      if (a == pins::I2C_ADDR_RTC) theMap.rtc = a;
-      else if (a >= 0x18 && a <= 0x1F) {
-        if (!theMap.es8311 && probeES8311(a)) theMap.es8311 = a;
-        else if (!theMap.pca9557) theMap.pca9557 = a;
-      }
-    }
-    unlock();
+    Map m;
+    bool ok = scanInto(m);
+    if (!ok) { delay(20); ok = scanInto(m); }
+    if (ok || !scanned) theMap = m;
+    if (!ok) LOGW("I2C scan looked wrong (%u acks, rtc %s); %s", m.n, m.rtc ? "seen" : "missing", scanned ? "kept the previous map" : "using it anyway");
     scanned = true;
     String list;
     for (uint8_t i = 0; i < theMap.n; i++) { char b[8]; snprintf(b, sizeof(b), " 0x%02X", theMap.found[i]); list += b; }
@@ -55,6 +71,20 @@ namespace i2c_bus {
     return theMap;
   }
 
+  void requestRescan() { rescanReq = true; }
+  void loop() {
+    if (!rescanReq) return;
+    rescanReq = false;
+    Map m;
+    bool ok = scanInto(m);
+    if (!ok) { delay(20); ok = scanInto(m); }
+    if (ok) {
+      theMap = m;
+      String list;
+      for (uint8_t i = 0; i < m.n; i++) { char b[8]; snprintf(b, sizeof(b), " 0x%02X", m.found[i]); list += b; }
+      LOGI("I2C rescan:%s", list.c_str());
+    } else LOGW("I2C rescan looked wrong (%u acks, rtc %s), kept the previous map", m.n, m.rtc ? "seen" : "missing");
+  }
   const Map& map() { return theMap; }
 
   bool writeReg(uint8_t addr, uint8_t reg, uint8_t val) { return writeRegs(addr, reg, &val, 1); }

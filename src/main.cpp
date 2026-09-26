@@ -41,6 +41,18 @@ static constexpr uint32_t MAX_FAILED_BOOTS = 3;
 RTC_NOINIT_ATTR static uint32_t g_bootAttempts;   // survives resets (not power cycles): catches boot loops caused by panel settings
 static bool bootConfirmed = false;
 
+// puts the sensor pages into the rotation when a sensor is present (in RAM; saving the Display tab keeps them)
+static void addSensorPages() {
+  if (!env_sensor::present() || !g_cfg.indoor.auto_page) return;
+  auto addPage = [](uint8_t id) {
+    for (uint8_t i = 0; i < g_cfg.display.npages; i++) if (g_cfg.display.pages[i] == id) return;
+    if (g_cfg.display.npages < PAGE_COUNT) g_cfg.display.pages[g_cfg.display.npages++] = id;
+  };
+  addPage(PAGE_INDOOR);
+  addPage(PAGE_BARO);
+  if (env_sensor::hasGas()) addPage(PAGE_AIR);
+}
+
 static void onButton(uint8_t key, bool longPress) {
   LOGI("btn K%u %s", key + 1, longPress ? "long" : "short");
   if (alarmclock::ringing()) {                       // any key deals with a ringing alarm or timer first
@@ -114,16 +126,7 @@ void setup() {
   voice_pack::begin();
   buttons::begin(onButton);
   env_sensor::begin(g_cfg.indoor);
-  if (env_sensor::present() && g_cfg.indoor.auto_page) {
-    // put the sensor pages into the rotation (in RAM; saving the Display tab keeps them)
-    auto addPage = [](uint8_t id) {
-      for (uint8_t i = 0; i < g_cfg.display.npages; i++) if (g_cfg.display.pages[i] == id) return;
-      if (g_cfg.display.npages < PAGE_COUNT) g_cfg.display.pages[g_cfg.display.npages++] = id;
-    };
-    addPage(PAGE_INDOOR);
-    addPage(PAGE_BARO);
-    if (env_sensor::hasGas()) addPage(PAGE_AIR);
-  }
+  addSensorPages();
   lightning::begin();
   ir_remote::begin(g_cfg.remote);
   LOGI("setup done, heap %lu", (unsigned long)ESP.getFreeHeap());
@@ -134,7 +137,9 @@ void loop() {
   wifi_mgr::loop();
   timesvc::loop();
   buttons::loop();
+  i2c_bus::loop();
   env_sensor::loop(now);
+  if (env_sensor::consumeDetectedEvent()) { app::cfgLock(); addSensorPages(); app::cfgUnlock(); }
   ir_remote::loop();
   app::loop();
   if (!bootConfirmed && now > BOOT_OK_AFTER_MS) { bootConfirmed = true; g_bootAttempts = 0; }

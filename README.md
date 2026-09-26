@@ -356,7 +356,8 @@ and the Display tab sets radius, timing and how often it appears. US coverage on
 
 Any board with a Bosch **BME280** (temperature, humidity, pressure), **BMP280** (no humidity) or **BME680 / BME688**
 works: wire 3.3 V, GND, SDA to GPIO 1 and SCL to GPIO 2 of the controller (the same bus as the RTC and the codec). The
-firmware finds the sensor at 0x76 or 0x77 by its chip ID at boot, adds an **indoor** page to the rotation (a house icon,
+firmware finds the sensor at 0x76 or 0x77 by its chip ID at boot (and keeps looking every 30 seconds, so it can be
+plugged in while the clock runs), adds an **indoor** page to the rotation (a house icon,
 temperature, humidity and pressure) and shows the values on the Status tab with a three-hour chart. Keep the sensor a
 few inches away from the panel and the controller, which run warm, or dial the offset in on the Location & Weather tab.
 
@@ -467,7 +468,7 @@ curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweat
 | WiFi weak while the panel runs | raise TX power on the WiFi tab, route the ribbon cable away from the antenna |
 | No chime | Status tab shows whether the ES8311 was found; check volume, quiet hours, speaker connector |
 | Radar never appears | Status tab → System shows the radar state; it needs internet, a US location and about 20 s after WiFi for the first eleven frames; "NO RADAR" on the panel means no frames yet |
-| Indoor page says NO SENSOR | Status tab → System lists the I2C addresses; a BME280/BME680 answers at 0x76 or 0x77 (check SDO/address jumper, 3.3 V, SDA on GPIO 1, SCL on GPIO 2) |
+| Indoor sensor "not detected" | the Status tab's Indoor card lists the I2C addresses seen and has a *Scan again* button; a BME280/BME680 answers at 0x76 or 0x77. Use the 4-pin connector on the left edge (3V3 GND IO1 IO2), SDA to IO1, SCL to IO2, wired by label (Qwiic cables have GND and 3V3 the other way round). The clock also looks for a sensor every 30 s, so no reboot is needed |
 | Indoor temperature reads high | the board warms the sensor: move it on a short lead or set a negative offset on the Location & Weather tab |
 | Sounds are fuzzy or distorted | Volume 100 % is the codec's full scale; the small speaker distorts near the top, so try 50-70 %. Firmware before 0.5.1 applied digital gain above 75 %, which clipped: update |
 | Chime plays but nothing is spoken | Audio tab: the voice pack must show as installed; press "Download voice pack" (needs internet and about 4 MB of free flash), check `/api/log` for `voice:` lines |
