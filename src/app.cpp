@@ -54,7 +54,9 @@ namespace app {
     cfgMtx = xSemaphoreCreateRecursiveMutex();
     bootMs = millis();
     prevReset.reason = (int)esp_reset_reason();
-    if (g_bb.magic == BB_MAGIC && prevReset.reason != ESP_RST_POWERON && prevReset.reason != ESP_RST_UNKNOWN) {
+    const int r = prevReset.reason;
+    const bool unexpected = r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT || r == ESP_RST_WDT || r == ESP_RST_BROWNOUT;
+    if (g_bb.magic == BB_MAGIC && unexpected) {
       prevReset.valid = true;
       memcpy(prevReset.where, g_bb.where, sizeof(prevReset.where));
       prevReset.where[sizeof(prevReset.where) - 1] = '\0';

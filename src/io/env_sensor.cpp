@@ -30,7 +30,9 @@ namespace env_sensor {
     Reading cur;
     Hist* hist = nullptr;                                 // PSRAM ring, HIST_MIN entries
     uint16_t histHead = 0, histCount = 0;
-    uint32_t lastPoint = 0, lastTrigger = 0, readyAt = 0, errs = 0, startedMs = 0;
+    uint32_t lastPoint = 0, lastTrigger = 0, readyAt = 0, errs = 0, startedMs = 0, errRun = 0;
+    const char* lastErr = "";
+    constexpr uint32_t REINIT_AFTER = 6;   // consecutive failed samples before the sensor is re-initialised
     bool measuring = false, gasOn = false;
     float altHint = NAN, outdoorC = NAN;
     float airBaseline = 0, savedBaseline = 0;             // kOhm
@@ -97,7 +99,9 @@ namespace env_sensor {
       ok &= i2c_bus::writeReg(addr, 0x75, 0x00);       // filter off
       gasOn = cfg.gas;
       if (gasOn) {
-        ok &= i2c_bus::writeReg(addr, 0x5A, heaterCode(320.0f, 25.0f));   // heater profile 0: 320 C
+        const uint8_t hc = heaterCode(320.0f, 25.0f);
+        LOGI("indoor: BME680 heater code %u for 320 C (GH1 %d GH2 %d GH3 %d range %u val %d)", hc, c680.GH1, c680.GH2, c680.GH3, c680.res_heat_range, c680.res_heat_val);
+        ok &= i2c_bus::writeReg(addr, 0x5A, hc);                            // heater profile 0: 320 C
         ok &= i2c_bus::writeReg(addr, 0x64, 0x65);     // gas_wait_0: 37 x 4 ms = 148 ms
         ok &= i2c_bus::writeReg(addr, 0x70, 0x00);     // heater on
         ok &= i2c_bus::writeReg(addr, 0x71, 0x10);     // run_gas, profile 0
@@ -416,7 +420,24 @@ namespace env_sensor {
     float t, p, h, gasOhm = 0;
     bool gasValid = false;
     bool ok = kind == Type::BME680 ? read680(t, p, h, gasValid, gasOhm) : read280(t, p, h);
-    if (!ok || t < -45 || t > 90 || p < 300 || p > 1200) { errs++; return; }
+    if (!ok || t < -45 || t > 90 || p < 300 || p > 1200) {
+      errs++; errRun++;
+      lastErr = !ok ? (i2c_bus::readReg(addr, REG_ID, *(uint8_t*)&t) ? "not ready" : "i2c") : "out of range";
+      if (errRun == REINIT_AFTER) {
+        // the sensor stopped answering or lost its settings (loose cable, power dip, chip reset): start over. If it is
+        // gone from the bus the hot-plug probe finds it again when it comes back.
+        LOGW("indoor: %lu failed samples in a row (%s), re-initialising %s", (unsigned long)errRun, lastErr, typeName());
+        Type was = kind;
+        kind = Type::None; addr = 0;
+        if (take()) { cur = Reading(); give(); }
+        lastProbe = 0;
+        if (probe(false)) { errRun = 0; LOGI("indoor: %s back", typeName()); }
+        else LOGW("indoor: %s not answering, waiting for it to come back", was == Type::BME680 ? "BME680" : "sensor");
+      }
+      return;
+    }
+    if (errRun) LOGI("indoor: reading again after %lu failed samples", (unsigned long)errRun);
+    errRun = 0; lastErr = "";
     publish(t, p, h, gasValid, gasOhm, now);
   }
 
@@ -463,4 +484,6 @@ namespace env_sensor {
   const char* condensationName(uint8_t c) { return c == 2 ? "likely" : c == 1 ? "possible" : "none"; }
   const char* mouldName(uint8_t m) { return m == 2 ? "high" : m == 1 ? "elevated" : "none"; }
   uint32_t errors() { return errs; }
+  const char* lastError() { return lastErr; }
+  uint32_t consecutiveErrors() { return errRun; }
 }

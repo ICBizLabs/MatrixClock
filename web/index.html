@@ -401,8 +401,9 @@ function indoorStatus(I,bus){const card=$('#indoor-card');if(!card)return;const 
  const t=$('#st-indoor');t.innerHTML='';$('#indoor-none').hidden=present;$('#inchart').hidden=!present;$('#inchart-note').hidden=!present;
  if(!present){row(t,'Sensor','<span class="warn">not detected</span>');row(t,'I2C devices seen',(bus&&bus.found&&bus.found.length?bus.found.join(', '):'none')+' <small>(0x18 codec, 0x19 buttons, 0x40 microphones, 0x51 clock; a BME680 shows as 0x76 or 0x77)</small>');return;}
  const u=cfg&&cfg.weather&&cfg.weather.units==='imperial';const pu=cfg&&cfg.indoor?cfg.indoor.pressure_unit:'auto';const inhg=pu==='inhg'||(pu==='auto'&&u);
- row(t,'Sensor',I.sensor+' at 0x'+(I.address||0).toString(16)+(I.errors?' <span class="warn">('+I.errors+' read errors)</span>':''));
+ row(t,'Sensor',I.sensor+' at 0x'+(I.address||0).toString(16)+(I.errors_in_a_row?' <span class="bad">not answering: '+(I.last_error||'error')+' ('+I.errors_in_a_row+' in a row)</span>':I.errors?' <small>('+I.errors+' read errors so far)</small>':''));
  if(!I.valid){row(t,'Reading','<span class="warn">waiting for the first sample</span>');return;}
+ if(I.age_s>60)row(t,'Reading','<span class="bad">stale: last good sample '+Math.round(I.age_s/60)+' min ago</span>');
  const dT=u?I.d_temp_c*9/5:I.d_temp_c;
  row(t,'Temperature',(u?I.temp_f:I.temp_c)+'°'+(u?'F':'C')+' '+ARROW[I.trend_temp]+' <small>'+I.trend_temp+(I.span_min?' ('+(dT>0?'+':'')+dT.toFixed(1)+'° in '+(cfg?cfg.indoor.trend_min:60)+' min)':'')+'</small>');
  if(I.has_humidity)row(t,'Humidity',I.humidity+'% '+ARROW[I.trend_humidity]+' <small>'+I.trend_humidity+(I.span_min?' ('+(I.d_humidity>0?'+':'')+I.d_humidity+'% in '+(cfg?cfg.indoor.trend_min:60)+' min)':'')+'</small>');

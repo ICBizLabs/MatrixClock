@@ -61,4 +61,6 @@ namespace env_sensor {
   const char* condensationName(uint8_t c);
   const char* mouldName(uint8_t m);
   uint32_t errors();
+  const char* lastError();                      // "" or why the last sample failed ("i2c", "not ready", "out of range")
+  uint32_t consecutiveErrors();
 }

@@ -252,6 +252,8 @@ namespace web {
           }
         }
         in["errors"] = env_sensor::errors();
+        in["errors_in_a_row"] = env_sensor::consecutiveErrors();
+        in["last_error"] = env_sensor::lastError();
       }
       const i2c_bus::Map& m = i2c_bus::map();
       JsonObject i2c = root["i2c"].to<JsonObject>();
