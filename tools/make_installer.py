@@ -59,7 +59,7 @@ def main():
     shutil.copyfile(parts["firmware"], ota)
     ota_bytes = ota.read_bytes()
     manifest = {
-        "name": "Matrix Clock",
+        "name": "Matrix Weather Clock",
         "version": ver,
         "new_install_prompt_erase": True,
         "new_install_improv_wait_time": 0,

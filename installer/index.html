@@ -36,7 +36,7 @@ button.install{background:var(--acc);color:#1a1206;border:0;border-radius:8px;pa
  <p class="mut">If the port does not appear: hold <b>BOOT</b>, tap <b>RST</b>, release <b>BOOT</b>, then click Install again. Later updates can be uploaded from the clock's own web page (Update tab) using the OTA image below.</p>
 </div>
 
-<p class="mut">Files: <a id="factory" href="#">factory image</a> (full flash, for this installer or esptool at offset 0) · <a id="ota" href="#">OTA image</a> (for the Update tab) · <a href="https://github.com/ICBizLabs/MatrixClock">source and documentation</a></p>
+<p class="mut">Files: <a id="factory" href="#">factory image</a> (full flash, for this installer or esptool at offset 0) · <a id="ota" href="#">OTA image</a> (for the Update tab) · <a href="https://github.com/ICBizLabs/MatrixWeatherClock">source and documentation</a></p>
 <script>
 fetch('manifest.json').then(r=>r.json()).then(m=>{document.getElementById('ver').textContent=m.version;const f=m.builds[0].parts[0].path;document.getElementById('factory').href=f;document.getElementById('ota').href=f.replace('-factory.bin','-ota.bin');}).catch(()=>{document.getElementById('ver').textContent='unknown';});
 </script>

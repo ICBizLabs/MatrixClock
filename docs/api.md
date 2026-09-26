@@ -65,7 +65,7 @@ Configuration keys and defaults:
                 "speech": { "enabled": true, "alerts": true, "lightning": true, "alarms": true, "demo": true, "indoor": true, "repeat": 1 } },
   "pushbullet": { "token": "", "device_iden": "", "notify_alerts": true, "notify_min_severity": "Severe", "notify_lightning": true,
                   "notify_alarms": false, "notify_air": true, "show_pushes": true, "poll_sec": 60, "show_sec": 60, "chime": true },
-  "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixClock/manifest.json", "check_hours": 6 },
+  "update":   { "check": true, "auto_install": true, "url": "https://icbizlabs.github.io/MatrixWeatherClock/manifest.json", "check_hours": 6 },
   "radar":    { "enabled": true, "radius_km": 100, "every_n_cycles": 4, "show_when_precip": true, "precip_every_n_cycles": 2, "frame_ms": 350, "hold_ms": 1500, "show_sec": 12, "refresh_min": 5, "base_map": "both" },
   "remote":   { "enabled": true, "pin": 44, "buttons": [ { "code": "0x00FF629D", "action": "next_page" }, "... up to 24" ] },
   "indoor":   { "enabled": true, "auto_page": true, "sample_sec": 10, "temp_offset": 0, "humidity_offset": 0, "altitude_m": -1, "sea_level": true, "pressure_unit": "auto", "trend_min": 60, "pressure_trend_min": 180,

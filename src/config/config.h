@@ -181,7 +181,7 @@ struct PushbulletConfig {         // phone notifications out, pushes in (https:/
 struct UpdateConfig {             // self-update from the web installer's manifest (GitHub Pages)
   bool check = true;              // look for new versions periodically
   bool auto_install = true;       // install automatically when a newer version is found
-  char url[128] = "https://icbizlabs.github.io/MatrixClock/manifest.json";
+  char url[128] = "https://icbizlabs.github.io/MatrixWeatherClock/manifest.json";
   uint16_t check_hours = 6;
 };
 

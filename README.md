@@ -91,7 +91,7 @@ Pin map used by the firmware (`include/pins.h`):
 
 The easiest way to flash a board is the web installer, which uses Web Serial (Chrome or Edge on a computer):
 
-1. Open **https://icbizlabs.github.io/MatrixClock/** (published by the build workflow from the `installer/` folder;
+1. Open **https://icbizlabs.github.io/MatrixWeatherClock/** (published by the build workflow from the `installer/` folder;
    it goes live once GitHub Pages is enabled for the repository).
 2. Connect the board's programming USB-C port, click **Install Matrix Clock**, pick the serial port and choose "erase"
    on a first install. If the port is missing, hold BOOT, tap RST, release BOOT and try again.

@@ -363,6 +363,10 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
     if (!getBool(o, "auto_install", c.update.auto_install, t, err)) return false;
     if (!getStr(o, "url", c.update.url, t, err, false)) return false;
     if (strncmp(c.update.url, "https://", 8) != 0 && strncmp(c.update.url, "http://", 7) != 0) { err = "update.url: must start with http:// or https://"; return false; }
+    if (!strcmp(c.update.url, "https://icbizlabs.github.io/MatrixClock/manifest.json")) {   // repository renamed in 0.9.2; the old Pages address is gone
+      strlcpy(c.update.url, "https://icbizlabs.github.io/MatrixWeatherClock/manifest.json", sizeof(c.update.url));
+      t = true;
+    }
     if (!getNum(o, "check_hours", c.update.check_hours, t, err, 1, 168)) return false;
     if (t) changed |= CHG_UPDATE;
   }
