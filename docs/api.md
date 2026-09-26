@@ -50,7 +50,7 @@ All endpoints answer JSON unless noted. The web UI uses nothing else.
 Configuration keys and defaults:
 
 ```json
-{ "wifi":     { "ssid": "", "pass": "", "hostname": "matrixclock", "ap_pass": "", "tx_power": 34 },
+{ "wifi":     { "ssid": "", "pass": "", "hostname": "matrixweatherclock", "ap_pass": "", "tx_power": 34 },
   "location": { "lat": 39.7392, "lon": -104.9903, "name": "" },
   "time":     { "tz_id": "America/Denver", "tz_posix": "MST7MDT,M3.2.0,M11.1.0", "ntp1": "pool.ntp.org", "ntp2": "time.nist.gov", "use_24h": false, "show_seconds": false },
   "weather":  { "enabled": true, "units": "imperial", "refresh_min": 15, "forecast_days": 3 },

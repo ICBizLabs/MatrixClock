@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Matrix Clock setup</title>
+<title>Matrix Weather Clock setup</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#111418">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Matrix Clock">
+<meta name="apple-mobile-web-app-title" content="Weather Clock">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
 :root{--bg:#111418;--card:#1b2027;--line:#2b323c;--fg:#e6e9ee;--mut:#8b95a3;--acc:#3fa9f5;--ok:#3dbb6a;--bad:#e5484d}
@@ -37,7 +37,7 @@ a{color:var(--acc)}
 </head>
 <body>
 <main>
-<h1>Matrix Clock setup</h1>
+<h1>Matrix Weather Clock setup</h1>
 <p class="sub" id="sub">A few questions and the clock is ready.</p>
 <div class="steps"><i class="on"></i><i></i><i></i><i></i></div>
 
@@ -99,8 +99,8 @@ async function finish(){const ssid=$('#ssid').value.trim(),lat=parseFloat($('#la
  $('#finish').disabled=true;$('#m3').textContent='Saving…';$('#m3').className='msg';
  try{const j=await api('/api/config',body);if(!j.ok){$('#m3').textContent=j.error||'failed';$('#m3').className='msg bad';$('#finish').disabled=false;return;}
   const ap=cfg&&cfg.__ap;$('#donetitle').textContent=ap?'Saved, connecting to '+ssid:'Saved';
-  $('#donetext').textContent=ap?'The clock is joining your WiFi now. Watch the panel: it shows its address for 20 seconds once it is online. Reconnect this phone to '+ssid+' and open that address or http://matrixclock.local/ to finish.':'Settings applied. The clock will fetch weather and alerts in a moment.';
-  if(ap)$('#fulllink').href='http://matrixclock.local/';go(4);}catch(e){$('#m3').textContent='Could not reach the clock: '+e;$('#m3').className='msg bad';$('#finish').disabled=false;}}
+  $('#donetext').textContent=ap?'The clock is joining your WiFi now. Watch the panel: it shows its address for 20 seconds once it is online. Reconnect this phone to '+ssid+' and open that address or http://matrixweatherclock.local/ to finish.':'Settings applied. The clock will fetch weather and alerts in a moment.';
+  if(ap)$('#fulllink').href='http://matrixweatherclock.local/';go(4);}catch(e){$('#m3').textContent='Could not reach the clock: '+e;$('#m3').className='msg bad';$('#finish').disabled=false;}}
 (async()=>{try{cfg=await api('/api/config');const st=await api('/api/status');cfg.__ap=!!(st.wifi&&st.wifi.ap&&!st.wifi.connected);
  $('#ssid').value=cfg.wifi.ssid||'';$('#lat').value=cfg.location.lat;$('#lon').value=cfg.location.lon;$('#units').value=cfg.weather.units;$('#contact').value=cfg.alerts.user_agent_contact||'';$('#sev').value=cfg.alerts.min_severity;
  const t=$('#tz');(cfg.tz_options||[]).forEach(z=>{const o=document.createElement('option');o.value=z.id;o.textContent=z.label+' ('+z.id+')';t.appendChild(o);});t.value=cfg.time.tz_id;

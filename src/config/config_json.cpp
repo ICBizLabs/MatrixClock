@@ -130,6 +130,7 @@ bool config_from_json(JsonObjectConst src, AppConfig& c, uint16_t& changed, Stri
       if (c.wifi.ap_pass[0] && strlen(c.wifi.ap_pass) < 8) { err = "ap_pass: at least 8 characters"; return false; }
     }
     if (!getStr(o, "hostname", c.wifi.hostname, t, err)) return false;
+    if (!strcmp(c.wifi.hostname, "matrixclock")) { strlcpy(c.wifi.hostname, "matrixweatherclock", sizeof(c.wifi.hostname)); t = true; }   // project renamed in 0.10.0
     if (!validHostname(c.wifi.hostname)) { err = "hostname: use 1-31 lowercase letters, digits or '-'"; return false; }
     if (!getNum(o, "tx_power", c.wifi.tx_power, t, err, 8, 84)) return false;
     if (t) changed |= CHG_WIFI;

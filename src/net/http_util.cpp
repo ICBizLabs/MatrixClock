@@ -20,7 +20,7 @@ namespace http_util {
   }
 
   namespace {
-    bool request(const String& url, const Options& opt, const String* body, std::function<bool(Stream&, int)> consume, String& err, int* httpCode);
+    bool request(const String& url, const Options& opt, const String* body, std::function<bool(Stream&, int)> consume, String& err, int* httpCode, bool put = false);
   }
 
   bool readBody(Stream& s, int len, uint8_t* buf, size_t max, size_t& got, String& err, uint32_t stallMs) {
@@ -54,8 +54,12 @@ namespace http_util {
     return request(url, opt, &body, consume, err, httpCode);
   }
 
+  bool putJson(const String& url, const Options& opt, const String& body, std::function<bool(Stream&, int)> consume, String& err, int* httpCode) {
+    return request(url, opt, &body, consume, err, httpCode, true);
+  }
+
   namespace {
-  bool request(const String& url, const Options& opt, const String* body, std::function<bool(Stream&, int)> consume, String& err, int* httpCode) {
+  bool request(const String& url, const Options& opt, const String* body, std::function<bool(Stream&, int)> consume, String& err, int* httpCode, bool put) {
     const bool https = url.startsWith("https://");
     std::unique_ptr<WiFiClient> client;
     if (https) {
@@ -79,7 +83,7 @@ namespace http_util {
     if (opt.headerName && opt.headerValue) http.addHeader(opt.headerName, opt.headerValue);
     http.addHeader("Accept-Encoding", "identity");
     int code;
-    if (body) { http.addHeader("Content-Type", "application/json"); code = http.POST(*body); }
+    if (body) { http.addHeader("Content-Type", "application/json"); code = put ? http.PUT(*body) : http.POST(*body); }
     else code = http.GET();
     if (httpCode) *httpCode = code;
     bool ok = false;

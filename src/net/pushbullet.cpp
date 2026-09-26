@@ -43,12 +43,24 @@ namespace pushbullet {
     }
 
     // Registers the clock as a Pushbullet device once, so pushes can be targeted at it and sends show its name.
+    bool renamedDevice = false;
     bool ensureDevice(const AppConfig& cfg) {
-      if (cfg.pushbullet.device_iden[0]) { st.device_ok = true; return true; }
+      if (cfg.pushbullet.device_iden[0]) {
+        if (!renamedDevice) {   // devices registered before the project rename keep working; give them the new name once
+          renamedDevice = true;
+          http_util::Options opt;
+          opt.userAgent = MWC_USER_AGENT_NAME "/" MWC_VERSION;
+          opt.headerName = "Access-Token"; opt.headerValue = cfg.pushbullet.token;
+          String err;
+          http_util::putJson(String(API) + "devices/" + cfg.pushbullet.device_iden, opt, "{\"nickname\":\"Matrix Weather Clock\"}", nullptr, err);
+        }
+        st.device_ok = true;
+        return true;
+      }
       http_util::Options opt;
       opt.userAgent = MWC_USER_AGENT_NAME "/" MWC_VERSION;
       opt.headerName = "Access-Token"; opt.headerValue = cfg.pushbullet.token;
-      String body = "{\"nickname\":\"Matrix Clock\",\"model\":\"matrix-weather-clock\",\"manufacturer\":\"DIY\",\"icon\":\"system\",\"has_sms\":false}";
+      String body = "{\"nickname\":\"Matrix Weather Clock\",\"model\":\"matrix-weather-clock\",\"manufacturer\":\"DIY\",\"icon\":\"system\",\"has_sms\":false}";
       JsonDocument doc(psramAllocator());
       String err;
       bool ok = http_util::postJson(String(API) + "devices", opt, body, [&](Stream& s, int) {
@@ -95,7 +107,7 @@ namespace pushbullet {
     if (!take()) return false;
     if (qcount < QUEUE_LEN) {
       Item& it = queue[(qhead + qcount) % QUEUE_LEN];
-      strlcpy(it.title, title ? title : "Matrix Clock", sizeof(it.title));
+      strlcpy(it.title, title ? title : "Matrix Weather Clock", sizeof(it.title));
       strlcpy(it.body, body ? body : "", sizeof(it.body));
       qcount++;
     }

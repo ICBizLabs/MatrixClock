@@ -48,10 +48,10 @@ def main():
     for name, p in parts.items():
         if not p.exists():
             sys.exit(f"{name} missing: {p} (run pio run first)")
-    for old in out.glob("matrix-clock-*.bin"):
+    for old in out.glob("matrix-weather-clock-*.bin"):
         old.unlink()
-    factory = out / f"matrix-clock-{ver}-factory.bin"
-    ota = out / f"matrix-clock-{ver}-ota.bin"
+    factory = out / f"matrix-weather-clock-{ver}-factory.bin"
+    ota = out / f"matrix-weather-clock-{ver}-ota.bin"
     subprocess.check_call([sys.executable, "-m", "esptool", "--chip", "esp32s3", "merge_bin", "-o", str(factory),
                            "--flash_mode", "keep", "--flash_freq", "keep", "--flash_size", "16MB",
                            "0x0", str(parts["bootloader"]), "0x8000", str(parts["partitions"]),

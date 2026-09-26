@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Matrix Clock installer</title>
+<title>Matrix Weather Clock installer</title>
 <style>
 :root{--bg:#0f1114;--card:#1b1f26;--line:#2a303a;--fg:#d8dce3;--mut:#7e8794;--acc:#f5a623}
 body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,"Segoe UI",Roboto,sans-serif;padding:32px 20px}
@@ -18,7 +18,7 @@ button.install{background:var(--acc);color:#1a1206;border:0;border-radius:8px;pa
 </head>
 <body>
 <main>
-<h1>Matrix Clock installer</h1>
+<h1>Matrix Weather Clock installer</h1>
 <p class="mut">Flash the firmware to the Seengreat RGB Matrix HUB75 S3 board straight from this page. Version <span id="ver">…</span>.</p>
 
 <div class="card">
@@ -26,10 +26,10 @@ button.install{background:var(--acc);color:#1a1206;border:0;border-radius:8px;pa
   <li>Use Chrome or Edge on a computer (Web Serial is not available in Firefox, Safari or on phones).</li>
   <li>Connect the board's <b>programming</b> USB-C port (not the panel-power port) to the computer.</li>
   <li>Click Install, pick the board's serial port, and wait for the progress bar to finish. Choose "erase" on a first install.</li>
-  <li>The panel plays a test pattern, then starts the <code>MatrixClock-XXXX</code> WiFi network. Join it and open <a href="http://4.3.2.1/">http://4.3.2.1/</a> to finish setup.</li>
+  <li>The panel plays a test pattern, then starts the <code>MatrixWeatherClock-XXXX</code> WiFi network. Join it and open <a href="http://4.3.2.1/">http://4.3.2.1/</a> to finish setup.</li>
  </ol>
  <p><esp-web-install-button manifest="manifest.json">
-   <button slot="activate" class="install">Install Matrix Clock</button>
+   <button slot="activate" class="install">Install Matrix Weather Clock</button>
    <span slot="unsupported" class="unsupported">This browser cannot access serial ports. Use Chrome or Edge on Windows, macOS, Linux or ChromeOS.</span>
    <span slot="not-allowed" class="unsupported">Serial access needs a secure page: open this installer over HTTPS or from http://localhost.</span>
  </esp-web-install-button></p>

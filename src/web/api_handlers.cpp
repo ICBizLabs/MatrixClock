@@ -268,7 +268,7 @@ namespace web {
       config_to_json(g_cfg, root, !download);
       app::cfgUnlock();
       if (download) {
-        res->addHeader("Content-Disposition", "attachment; filename=\"matrix-clock-config.json\"");
+        res->addHeader("Content-Disposition", "attachment; filename=\"matrix-weather-clock-config.json\"");
         res->setLength();
         r->send(res);
         return;
@@ -569,7 +569,7 @@ namespace web {
       else sendJsonError(r, 409, "screen not available (no weather data yet?)");
     });
     server.on("/api/test/push", HTTP_POST, [](AsyncWebServerRequest* r) {
-      if (pushbullet::notify("Matrix Clock", "Test notification from your clock")) r->send(200, "application/json", "{\"ok\":true}");
+      if (pushbullet::notify("Matrix Weather Clock", "Test notification from your clock")) r->send(200, "application/json", "{\"ok\":true}");
       else sendJsonError(r, 409, "Pushbullet token not set");
     });
     server.on("/api/message/clear", HTTP_POST, [](AsyncWebServerRequest* r) { renderer::clearMessage(); r->send(200, "application/json", "{\"ok\":true}"); });

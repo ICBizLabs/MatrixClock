@@ -31,7 +31,7 @@ bool        panel_driver_parse(const char* s, uint8_t& out);
 struct WifiConfig {
   char ssid[33] = "";
   char pass[65] = "";
-  char hostname[32] = "matrixclock";
+  char hostname[32] = "matrixweatherclock";
   char ap_pass[65] = "";        // empty = open access point
   uint8_t tx_power = 34;        // wifi_power_t value: 34 = 8.5 dBm, 78 = 19.5 dBm
 };

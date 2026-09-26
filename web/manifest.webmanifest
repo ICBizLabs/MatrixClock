@@ -1,7 +1,7 @@
 {
-  "name": "Matrix Clock",
-  "short_name": "Matrix Clock",
-  "description": "Setup and status for the Matrix Clock LED weather clock",
+  "name": "Matrix Weather Clock",
+  "short_name": "Weather Clock",
+  "description": "Setup and status for the Matrix Weather Clock LED weather clock",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

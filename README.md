@@ -30,7 +30,7 @@ arrives, and is configured entirely through its own web interface.
   clock downloads once from the update site; no speech synthesis runs on the ESP32.
 - **Display control**: manual brightness, day/night schedule, night mode (very dim, clock only), gamma, colours,
   page order and timing.
-- **Web UI** with setup access point and captive portal, mDNS (`matrixclock.local`), REST API, WiFi scanner,
+- **Web UI** with setup access point and captive portal, mDNS (`matrixweatherclock.local`), REST API, WiFi scanner,
   test buttons (panel pattern, fake alert, chime), log viewer and over-the-air firmware update.
 - **Lightning**: live strikes from the Blitzortung.org network (optional, via the community MQTT relay). Strikes within
   your radius show a bolt next to the clock, a flash across the panel, a "LIGHTNING 8MI NW 3M" page and an optional chime.
@@ -93,11 +93,11 @@ The easiest way to flash a board is the web installer, which uses Web Serial (Ch
 
 1. Open **https://icbizlabs.github.io/MatrixWeatherClock/** (published by the build workflow from the `installer/` folder;
    it goes live once GitHub Pages is enabled for the repository).
-2. Connect the board's programming USB-C port, click **Install Matrix Clock**, pick the serial port and choose "erase"
+2. Connect the board's programming USB-C port, click **Install Matrix Weather Clock**, pick the serial port and choose "erase"
    on a first install. If the port is missing, hold BOOT, tap RST, release BOOT and try again.
-3. When it reboots, join the `MatrixClock-XXXX` network and open http://4.3.2.1/ to finish setup.
+3. When it reboots, join the `MatrixWeatherClock-XXXX` network and open http://4.3.2.1/ to finish setup.
 
-<img src="docs/ui/installer.png" width="560" alt="Web installer page with the Install Matrix Clock button">
+<img src="docs/ui/installer.png" width="560" alt="Web installer page with the Install Matrix Weather Clock button">
 
 The same page works from your own machine, because browsers treat `localhost` as a secure origin:
 
@@ -110,8 +110,8 @@ Releases: pushing a tag such as `v0.4.0` (matching `MWC_VERSION` in `platformio.
 GitHub release with the images, checksums and generated notes; a tag with a suffix like `v0.4.0-beta` becomes a
 pre-release.
 
-`installer/` also holds the images directly: `matrix-clock-<version>-factory.bin` (whole flash, write at offset 0 with
-esptool) and `matrix-clock-<version>-ota.bin` (upload from the clock's Update tab). Every push to `main` rebuilds the
+`installer/` also holds the images directly: `matrix-weather-clock-<version>-factory.bin` (whole flash, write at offset 0 with
+esptool) and `matrix-weather-clock-<version>-ota.bin` (upload from the clock's Update tab). Every push to `main` rebuilds the
 firmware on GitHub Actions, republishes the installer and, through the manifest, offers the new version to every clock
 that has automatic updates on; the images are also attached to each workflow run as an artifact. `python tools/make_installer.py --build` regenerates the folder locally.
 
@@ -146,14 +146,14 @@ are kept across updates.
 
 1. Power up. The panel shows a ten-second test pattern (solid colours, border, gradients, info text), then the clock
    with `SETUP WIFI` / `4.3.2.1` in the bottom half.
-2. Connect a phone or laptop to the WiFi network **MatrixClock-XXXX** (open by default). The setup page should open
+2. Connect a phone or laptop to the WiFi network **MatrixWeatherClock-XXXX** (open by default). The setup page should open
    automatically; otherwise browse to http://4.3.2.1/.
 3. **WiFi tab**: pick your network (Scan), enter the password, Save & connect. The access point goes away once the
    clock is online.
 4. **Location & Weather tab**: type your city or ZIP code, press *Find* and pick the match to fill in
    latitude and longitude (the lookup uses Open-Meteo's geocoding service from your browser), choose the time zone, units, and enter a contact e-mail. The NWS API requires a contact in every
    request; alerts stay disabled until one is set.
-5. From now on the UI is at http://matrixclock.local/ (or the IP shown in the header).
+5. From now on the UI is at http://matrixweatherclock.local/ (or the IP shown in the header).
 
 <img src="docs/ui/setup-wifi.png" width="640" alt="WiFi tab while the clock runs its setup access point">
 
@@ -223,7 +223,7 @@ below); the clock stays visible throughout.
 Phones and tablets get a simpler path. The setup access point opens the **setup wizard** at http://4.3.2.1/setup:
 four short screens for WiFi (with a network list), location (city/ZIP search or coordinates), time zone and units,
 and the NWS alert contact, saved in one go. It is also reachable any time from the "Setup wizard" link in the header
-of the full page, or at http://matrixclock.local/setup.
+of the full page, or at http://matrixweatherclock.local/setup.
 
 The pages carry a web-app manifest, icons and the iOS meta tags, so "Add to Home Screen" gives you an icon that opens
 the clock's page full screen like an app. On a phone the page shows a one-time hint with the two taps needed (Share →
@@ -237,7 +237,7 @@ install prompt over HTTPS, which the clock's plain-HTTP LAN page cannot provide;
 
 ## Web interface
 
-Everything is configured from the clock's own page at http://matrixclock.local/. The Status tab shows a live view of
+Everything is configured from the clock's own page at http://matrixweatherclock.local/. The Status tab shows a live view of
 the panel, current conditions, active alerts with acknowledge and test buttons, and system health; the other tabs
 hold the settings. Changes apply immediately except panel driver settings, which need a reboot.
 
@@ -410,9 +410,9 @@ another Piper voice, run `tools/make_voice_pack.py` (see its header for the file
 ## Pushbullet
 
 Notify tab: paste an access token from Pushbullet's account settings. The clock registers itself as a device named
-"Matrix Clock" and then pushes a note to your phone for new NWS alerts at or above the chosen severity, for the first
+"Matrix Weather Clock" and then pushes a note to your phone for new NWS alerts at or above the chosen severity, for the first
 lightning strike of a storm (and at most every five minutes after that), and optionally for alarms. With "show pushes"
-on it also polls your account and scrolls any push sent to all devices or to the clock: pick "Matrix Clock" in the
+on it also polls your account and scrolls any push sent to all devices or to the clock: pick "Matrix Weather Clock" in the
 phone app, or use IFTTT / Home Assistant / `curl` against the Pushbullet API. Pushes the clock sent itself are ignored.
 
 ## Remote control
@@ -425,7 +425,7 @@ its timing, so it can still be learned. Holding a key repeats only the brightnes
 
 <img src="docs/ui/remote.png" width="300" alt="Phone remote page with big buttons">
 
-**Phone.** http://matrixclock.local/remote is a one-screen remote for a phone or tablet, made to be added to the home
+**Phone.** http://matrixweatherclock.local/remote is a one-screen remote for a phone or tablet, made to be added to the home
 screen: dismiss, next page, radar, forecast, hourly graph, 5/10/30-minute timers, snooze and stop, brighter and dimmer,
 night mode, mute, chime, refresh, demo, show IP. Scripts and home automation can call the same actions with
 `POST /api/action?name=show_radar`; `GET /api/actions` lists them. Brightness steps and the night-mode override live
@@ -445,12 +445,12 @@ Everything the web UI does goes through JSON endpoints, so the clock can be scri
 configuration schema is in [docs/api.md](docs/api.md). Examples:
 
 ```sh
-curl -s http://matrixclock.local/api/status | jq .
-curl -X POST http://matrixclock.local/api/config -H 'Content-Type: application/json' \
+curl -s http://matrixweatherclock.local/api/status | jq .
+curl -X POST http://matrixweatherclock.local/api/config -H 'Content-Type: application/json' \
      -d '{"display":{"brightness":40},"audio":{"volume":80}}'
-curl -X POST http://matrixclock.local/api/test/alert -H 'Content-Type: application/json' \
+curl -X POST http://matrixweatherclock.local/api/test/alert -H 'Content-Type: application/json' \
      -d '{"event":"Tornado Warning","severity":"Extreme","headline":"Test until 5 PM","minutes":3}'
-curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixclock.local/update
+curl -F 'firmware=@.pio/build/seengreat_hub75_s3/firmware.bin' http://matrixweatherclock.local/update
 ```
 
 ## Troubleshooting

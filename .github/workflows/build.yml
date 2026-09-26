@@ -88,7 +88,7 @@ jobs:
       - name: Write release notes
         run: |
           cd release
-          F=$(ls matrix-clock-*-factory.bin); O=$(ls matrix-clock-*-ota.bin)
+          F=$(ls matrix-weather-clock-*-factory.bin); O=$(ls matrix-weather-clock-*-ota.bin)
           MD5=$(python3 -c "import json;print(json.load(open('manifest.json'))['ota_md5'])")
           {
             echo "Firmware ${GITHUB_REF_NAME} for the Seengreat RGB Matrix HUB75 S3 controller with a 64x32 HUB75 panel."

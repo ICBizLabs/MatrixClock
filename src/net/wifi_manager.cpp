@@ -39,7 +39,7 @@ namespace wifi_mgr {
       uint8_t mac[6];
       WiFi.macAddress(mac);
       char name[24];
-      snprintf(name, sizeof(name), "MatrixClock-%02X%02X", mac[4], mac[5]);
+      snprintf(name, sizeof(name), "MatrixWeatherClock-%02X%02X", mac[4], mac[5]);
       apName = name;
       WiFi.mode(cfg.ssid[0] ? WIFI_AP_STA : WIFI_AP);
       WiFi.softAPConfig(AP_IP, AP_IP, IPAddress(255, 255, 255, 0));

@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Matrix Clock">
+<meta name="apple-mobile-web-app-title" content="Weather Clock">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>
 :root{--bg:#111418;--card:#1b2027;--line:#2b323c;--fg:#e6e9ee;--mut:#8b95a3;--acc:#3fa9f5;--ok:#3dbb6a;--warn:#f0a030;--bad:#e5484d}
@@ -63,7 +63,7 @@ progress{width:100%;height:10px}
  <div class="card"><h2>Send a message</h2><div class="row"><input id="msgtext" placeholder="Text to scroll on the clock" maxlength="200" style="flex:1;min-width:200px">
   <input id="msgsec" type="number" min="0" max="86400" value="30" style="width:80px" title="seconds, 0 = until cleared"><label class="chk"><input type="checkbox" id="msgchime">Chime</label>
   <button class="btn" onclick="sendMsg()">Show</button><button class="btn sec" onclick="post('/api/message/clear')">Clear</button></div>
-  <p class="msg">Anything can push a message: <code>curl -X POST http://matrixclock.local/api/message -H 'Content-Type: application/json' -d '{"text":"Dinner is ready","seconds":60,"chime":true}'</code></p></div>
+  <p class="msg">Anything can push a message: <code>curl -X POST http://matrixweatherclock.local/api/message -H 'Content-Type: application/json' -d '{"text":"Dinner is ready","seconds":60,"chime":true}'</code></p></div>
  <div class="card"><h2>Alerts</h2><div id="st-alerts"></div>
   <div class="row"><button class="btn sec" onclick="post('/api/show',null,'screen=forecast')">Show forecast</button><button class="btn sec" onclick="post('/api/show',null,'screen=hourly')">Show hourly graph</button>
   <button class="btn sec" onclick="post('/api/alerts/ack',null,'id=all')">Acknowledge all</button>
@@ -285,7 +285,7 @@ progress{width:100%;height:10px}
   <label class="chk"><input data-k="pushbullet.chime" type="checkbox">Chime when a push is shown</label>
  </div>
  <div class="row"><button class="btn" onclick="save('notify')">Save</button><button class="btn sec" onclick="post('/api/test/push')">Send test push</button><span class="msg" id="msg-notify"></span></div>
- <p class="msg">The clock registers itself as a device called "Matrix Clock" in your Pushbullet account, so you can push text to it from the phone app (choose the device) or from IFTTT / scripts. Leave the token as *** to keep the stored one.</p></div>
+ <p class="msg">The clock registers itself as a device called "Matrix Weather Clock" in your Pushbullet account, so you can push text to it from the phone app (choose the device) or from IFTTT / scripts. Leave the token as *** to keep the stored one.</p></div>
 </section>
 
 <section id="remote">
@@ -311,7 +311,7 @@ progress{width:100%;height:10px}
  </div><div class="row"><button class="btn" onclick="save('wifi')">Save &amp; connect</button><button class="btn sec" onclick="scan()">Scan networks</button><span class="msg" id="msg-wifi"></span></div>
  <p class="msg">Leave the password as *** to keep the stored one. After saving new credentials the clock connects; the setup AP disappears once it is online.</p></div>
  <div class="card"><h2>Danger zone</h2>
-  <p class="msg">Factory reset erases every setting stored on the clock: WiFi credentials, location and time zone, alert, display, panel and audio settings, alarms, and the Pushbullet token. The clock then reboots into the setup access point (MatrixClock-XXXX / http://4.3.2.1/) as on first use. The firmware itself is not changed. Consider downloading a backup on the Update tab first.</p>
+  <p class="msg">Factory reset erases every setting stored on the clock: WiFi credentials, location and time zone, alert, display, panel and audio settings, alarms, and the Pushbullet token. The clock then reboots into the setup access point (MatrixWeatherClock-XXXX / http://4.3.2.1/) as on first use. The firmware itself is not changed. Consider downloading a backup on the Update tab first.</p>
   <div class="row"><button class="btn bad" onclick="if(confirm('Erase all settings and reboot into setup mode?'))post('/api/factory-reset',null,'confirm=yes')">Factory reset</button></div></div>
 </section>
 
